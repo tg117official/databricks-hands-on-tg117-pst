@@ -196,7 +196,7 @@ except Exception as e:
     print("Error:", str(e)[:500], "...")
 
 # ----------------------------
-# FINAL TEACHING SUMMARY
+# FINAL SUMMARY
 # ----------------------------
 print("\n============================================================")
 print("KEY TAKEAWAYS (teach these):")
