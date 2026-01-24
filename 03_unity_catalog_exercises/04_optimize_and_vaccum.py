@@ -1,80 +1,71 @@
 # ============================================================
-# DELTA OPTIMIZE + VACUUM DEMO (Single Script)
-# Goal: Demonstrate the most common real-world situations:
-# 1) Small files problem (many tiny writes) -> OPTIMIZE compaction
+# DELTA OPTIMIZE + VACUUM DEMO (ADLS + Azure Portal Visualization)
+# Goal: Demonstrate real-world situations:
+# 1) Small files problem -> OPTIMIZE compaction
 # 2) UPDATE/DELETE/MERGE create "removed" files logically -> still on storage
 # 3) VACUUM physically deletes old/removed files (after retention window)
 # 4) Time travel works before VACUUM, can break after aggressive VACUUM
 #
-# Recommended environment: Databricks notebook (because dbutils.fs.ls is easiest)
+# Run in: Databricks notebook, DEV schema
 # ============================================================
 
 from pyspark.sql import SparkSession
-import shutil, os
 
 spark = SparkSession.builder.getOrCreate()
 
+# ----------------------------
+# EXERCISE 0) UC context + choose ADLS location
+# ----------------------------
+CATALOG = "ecom_dev"
+SCHEMA  = "delta_lab"
+
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
+spark.sql(f"USE CATALOG {CATALOG}")
+spark.sql(f"USE SCHEMA {SCHEMA}")
+
 TABLE_NAME = "demo_opt_vac"
-DBFS_PATH  = "/dbfs/tmp/delta_opt_vac_demo/orders"     # physical driver path
-DELTA_LOC  = "/dbfs/tmp/delta_opt_vac_demo/orders"     # used in SQL LOCATION
-LOG_PATH   = f"{DBFS_PATH}/_delta_log"
+
+# ADLS Delta folder (table will be created at this LOCATION)
+# Replace with YOUR governed external path.
+DELTA_LOC = "abfss://data@uclabdemo.dfs.core.windows.net/uc_lab/delta_opt_vac_demo/orders"
+
+print("Using:", f"{CATALOG}.{SCHEMA}")
+print("TABLE_NAME:", TABLE_NAME)
+print("DELTA_LOC:", DELTA_LOC)
+
+# STOP (Azure Portal setup):
+# - Open the ADLS container in Azure Portal.
+# - Navigate to the folder:
+#   uc_lab/delta_opt_vac_demo/orders
+# - Keep it open to observe:
+#   _delta_log folder and parquet files after each exercise.
+
 
 # ----------------------------
-# Helpers: list files + count parquet files (to "see" compaction/cleanup)
+# EXERCISE 1) Clean start (metadata only)
+# Goal:
+# - Drop table
+# Note:
+# - Since this is an external LOCATION, DROP TABLE typically does NOT delete files.
+# - For a clean folder, delete the folder manually in Azure Portal before continuing.
 # ----------------------------
-def ls(path):
-    """List files using dbutils if available; fallback to os.walk."""
-    print(f"\n--- LIST: {path} ---")
-    try:
-        # Databricks
-        display(dbutils.fs.ls(path))
-        return
-    except Exception:
-        pass
-
-    # fallback for /dbfs paths
-    if os.path.exists(path):
-        for root, dirs, files in os.walk(path):
-            rel = root.replace(path, ".")
-            print(rel)
-            for d in sorted(dirs):
-                print("  [DIR] ", d)
-            for f in sorted(files):
-                print("  [FILE]", f)
-    else:
-        print("(path not found)")
-
-def count_parquet_files(path):
-    """Count parquet files under the table folder (excluding _delta_log)."""
-    cnt = 0
-    for root, dirs, files in os.walk(path):
-        if "_delta_log" in root:
-            continue
-        for f in files:
-            if f.endswith(".parquet"):
-                cnt += 1
-    return cnt
-
-def show_history():
-    print("\n--- DESCRIBE HISTORY (versions & operations) ---")
-    spark.sql(f"DESCRIBE HISTORY {TABLE_NAME}").show(50, truncate=False)
-
-# ----------------------------
-# STEP 0) Clean start: drop table + delete folder
-# ----------------------------
-print("\n[STEP 0] Clean start\n")
+print("\n[EXERCISE 1] Clean start: DROP TABLE\n")
 spark.sql(f"DROP TABLE IF EXISTS {TABLE_NAME}")
-try:
-    shutil.rmtree(DBFS_PATH)
-except Exception:
-    pass
 
-ls("/dbfs/tmp/delta_opt_vac_demo")
+print("If you want a clean ADLS folder, delete it manually in Azure Portal now:")
+print("Path:", DELTA_LOC)
+
+# STOP:
+# - Optionally delete the folder in Azure Portal to start fresh.
+
 
 # ----------------------------
-# STEP 1) Create a Delta table at a known LOCATION
+# EXERCISE 2) Create Delta table at known LOCATION
+# Goal:
+# - Create table pointing to ADLS folder
+# - Observe _delta_log creation in Azure Portal
 # ----------------------------
-print("\n[STEP 1] Create Delta table\n")
+print("\n[EXERCISE 2] Create Delta table at LOCATION\n")
 spark.sql(f"""
 CREATE TABLE {TABLE_NAME} (
   order_id INT,
@@ -85,109 +76,153 @@ USING DELTA
 LOCATION '{DELTA_LOC}'
 """)
 
-ls(DBFS_PATH)
-ls(LOG_PATH)
+print("Azure Portal check now:")
+print("- _delta_log should appear under the LOCATION")
+
+# STOP:
+# - Explain: Delta = parquet files + _delta_log transaction log.
+
 
 # ----------------------------
-# STEP 2) Create the "small files problem" (many tiny appends)
-# Common situation: streaming micro-batches or frequent small batch loads.
-# Each small append typically creates at least one small parquet file.
+# EXERCISE 3) Create the "small files problem" (many tiny appends)
+# Goal:
+# - 20 small inserts (each insert is a separate transaction/version)
+# - Observe many parquet files getting created (often) + log commits
 # ----------------------------
-print("\n[STEP 2] Create small files via many small appends\n")
-for i in range(1, 21):  # 20 small batches
+print("\n[EXERCISE 3] Create small files via many small appends\n")
+
+for i in range(1, 21):
     spark.sql(f"INSERT INTO {TABLE_NAME} VALUES ({i}, {i*10}, 'CREATED')")
 
 spark.sql(f"SELECT COUNT(*) AS rows FROM {TABLE_NAME}").show()
-ls(DBFS_PATH)
-ls(LOG_PATH)
 
-before_opt_files = count_parquet_files(DBFS_PATH)
-print(f"\nParquet file count BEFORE OPTIMIZE: {before_opt_files}")
+print("Azure Portal check now:")
+print("- You should see multiple parquet files (often many small ones)")
+print("- _delta_log should have many commit JSON files (one per INSERT)")
+
+# STOP:
+# - streaming micro-batches / frequent small loads cause small files.
+
 
 # ----------------------------
-# STEP 3) OPTIMIZE (Compaction)
-# Common situation: fix small files, reduce tasks, improve scan performance.
-# OPTIMIZE rewrites data into fewer larger files (copy-on-write).
-# Old small files become logically removed (still on storage until VACUUM).
+# EXERCISE 4) OPTIMIZE (Compaction)
+# Goal:
+# - Compact small files into fewer bigger files
+# - OPTIMIZE is copy-on-write: it writes new files and marks old ones as removed in log
 # ----------------------------
-print("\n[STEP 3] OPTIMIZE to compact small files\n")
+print("\n[EXERCISE 4] OPTIMIZE to compact small files\n")
+
 spark.sql(f"OPTIMIZE {TABLE_NAME}")
 
-after_opt_files = count_parquet_files(DBFS_PATH)
-print(f"\nParquet file count AFTER OPTIMIZE: {after_opt_files}")
+print("OPTIMIZE executed (if supported). Now check:")
+print("- Azure Portal: new larger parquet files may appear")
+print("- Old small files may still physically exist (until VACUUM), but are logically removed")
+print("- _delta_log has a new commit for OPTIMIZE")
 
-# Observe: history shows OPTIMIZE, and _delta_log gets new commits/checkpoints eventually
-show_history()
-ls(DBFS_PATH)
-ls(LOG_PATH)
+print("\nDESCRIBE HISTORY after OPTIMIZE:")
+spark.sql(f"DESCRIBE HISTORY {TABLE_NAME}").show(50, truncate=False)
+
+# STOP:
+# - OPTIMIZE improves performance (fewer files, fewer tasks).
+
 
 # ----------------------------
-# STEP 4) Create "removed files" using UPDATE + DELETE (typical CDC activity)
-# Common situation: MERGE/UPDATE/DELETE rewrites files (copy-on-write)
-# and marks old files removed in log, but files still exist physically.
+# EXERCISE 5) UPDATE + DELETE (create logically removed files)
+# Goal:
+# - Typical CDC activity
+# - Table results change, but old files stay on storage until VACUUM
 # ----------------------------
-print("\n[STEP 4] UPDATE + DELETE to create removed files (logical removals)\n")
+print("\n[EXERCISE 5] UPDATE + DELETE (logical removals)\n")
 
 spark.sql(f"UPDATE {TABLE_NAME} SET status='SHIPPED' WHERE order_id BETWEEN 5 AND 10")
 spark.sql(f"DELETE FROM {TABLE_NAME} WHERE order_id IN (1,2,3)")
 
 spark.sql(f"SELECT * FROM {TABLE_NAME} ORDER BY order_id").show(50, truncate=False)
-show_history()
 
-# At this point, table result is correct, but older files are still on storage.
-ls(DBFS_PATH)
-ls(LOG_PATH)
+print("\nDESCRIBE HISTORY after UPDATE + DELETE:")
+spark.sql(f"DESCRIBE HISTORY {TABLE_NAME}").show(50, truncate=False)
+
+print("Azure Portal check now:")
+print("- More parquet files may appear (rewrite)")
+print("- Old parquet files still exist physically")
+print("- _delta_log has new commits for UPDATE and DELETE")
+
+# STOP:
+# - Key point: UPDATE/DELETE/MERGE never edit in place; they rewrite files.
+
 
 # ----------------------------
-# STEP 5) Time travel demo (works before VACUUM)
-# Common situation: auditing, debugging, rollback, reprocessing.
+# EXERCISE 6) Time travel BEFORE VACUUM (should work)
+# Goal:
+# - Capture an older version and query it
 # ----------------------------
-print("\n[STEP 5] Time travel BEFORE VACUUM (should work)\n")
+print("\n[EXERCISE 6] Time travel BEFORE VACUUM\n")
+
 hist = spark.sql(f"DESCRIBE HISTORY {TABLE_NAME}")
 minv = hist.agg({"version":"min"}).collect()[0][0]
 maxv = hist.agg({"version":"max"}).collect()[0][0]
 print(f"History range: min version={minv}, max version={maxv}")
 
-# Pick an older version (minv is often 0; choose something like minv+1 if available)
 older = int(minv) + 1 if int(minv) + 1 <= int(maxv) else int(minv)
 print(f"\nReading VERSION AS OF {older} (older snapshot):")
-spark.sql(f"SELECT * FROM {TABLE_NAME} VERSION AS OF {older} ORDER BY order_id").show(50, truncate=False)
+
+try:
+    spark.sql(f"SELECT * FROM {TABLE_NAME} VERSION AS OF {older} ORDER BY order_id").show(50, truncate=False)
+except Exception as e:
+    print("Time travel query failed (unexpected here unless permissions/retention issues).")
+    print("Error:", str(e)[:500], "...")
+
+# STOP:
+# - time travel works because old files are still available.
+
 
 # ----------------------------
-# STEP 6) VACUUM (Physical cleanup)
-# Common situation: storage control + remove old files no longer needed.
-# IMPORTANT:
-# - Default retention is typically 7 days (safe).
-# - VACUUM with very low retention can break time travel & streaming recovery.
-# - Databricks usually blocks RETAIN < 168 hours unless you disable a safety check.
-#
-# We'll show TWO modes:
-#   A) Safe/typical VACUUM (default) -> may not delete much in a fresh demo
-#   B) Demo-only aggressive VACUUM (RETAIN 0 HOURS) -> will delete old files now
+# EXERCISE 7A) VACUUM (safe/default retention)
+# Goal:
+# - Show default VACUUM behavior
+# - In a fresh demo, it may delete little because retention window isn't met
 # ----------------------------
-print("\n[STEP 6A] VACUUM (safe/default retention) — may delete little in a fresh demo\n")
-spark.sql(f"VACUUM {TABLE_NAME}")  # default retention
-ls(DBFS_PATH)
+print("\n[EXERCISE 7A] VACUUM with default retention (safe)\n")
+spark.sql(f"VACUUM {TABLE_NAME}")
 
-print("\n[STEP 6B] Demo-only aggressive VACUUM (RETAIN 0 HOURS)\n"
-      "WARNING: This can break time travel and is NOT recommended in production.\n")
+print("Azure Portal check now:")
+print("- You may see no change (common in fresh labs)")
+print("- Because default retention is usually 7 days (168 hours)")
 
-# Safety switch required on Databricks to allow <168 hours retention:
+# STOP:
+# - default VACUUM is safe but may not immediately delete files in a new table.
+
+
+# ----------------------------
+# EXERCISE 7B) Demo-only aggressive VACUUM (RETAIN 0 HOURS)
+# Goal:
+# - Physically delete old/removed files now
+# WARNING:
+# - NOT recommended in production
+# - Disables retention safety check temporarily
+# ----------------------------
+print("\n[EXERCISE 7B] Demo-only aggressive VACUUM (RETAIN 0 HOURS)\n"
+      "WARNING: This can break time travel and streaming recovery.\n")
+
 spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "false")
-
 spark.sql(f"VACUUM {TABLE_NAME} RETAIN 0 HOURS")
-
-# (Optional) turn safety back on after demo
 spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "true")
 
-ls(DBFS_PATH)
-ls(LOG_PATH)
+print("Azure Portal check now:")
+print("- Old/removed parquet files may be physically deleted")
+print("- Some time travel versions may become unreadable")
+
+# STOP:
+# - In production, keep safe retention and plan vacuum carefully.
+
 
 # ----------------------------
-# STEP 7) Time travel after aggressive VACUUM (may fail)
-# This demonstrates the real consequence: old snapshots can become unreadable.
+# EXERCISE 8) Time travel AFTER aggressive VACUUM (may fail)
+# Goal:
+# - Demonstrate consequence: older snapshot might fail
 # ----------------------------
-print("\n[STEP 7] Time travel AFTER aggressive VACUUM (may fail)\n")
+print("\n[EXERCISE 8] Time travel AFTER aggressive VACUUM (may fail)\n")
+
 try:
     spark.sql(f"SELECT * FROM {TABLE_NAME} VERSION AS OF {older} ORDER BY order_id").show(50, truncate=False)
     print("Time travel still worked (depends on what files were vacuumed).")
@@ -196,13 +231,13 @@ except Exception as e:
     print("Error:", str(e)[:500], "...")
 
 # ----------------------------
-# FINAL SUMMARY
+# FINAL SUMMARY (verbal teaching points)
 # ----------------------------
 print("\n============================================================")
-print("KEY TAKEAWAYS (teach these):")
-print("1) OPTIMIZE = performance: compacts many small parquet files into fewer large files.")
-print("2) OPTIMIZE is copy-on-write: it adds new files + marks old ones removed in the log.")
+print("KEY TAKEAWAYS:")
+print("1) OPTIMIZE = compacts many small parquet files into fewer larger files.")
+print("2) OPTIMIZE is copy-on-write: writes new files + marks old ones removed in _delta_log.")
 print("3) UPDATE/DELETE/MERGE also rewrite files and create logically removed files.")
-print("4) VACUUM = storage hygiene: physically deletes old/removed files AFTER retention window.")
-print("5) Aggressive VACUUM can break time travel and streaming recovery (use carefully).")
+print("4) VACUUM = physically deletes old/removed files AFTER retention window.")
+print("5) Aggressive VACUUM can break time travel and streaming recovery.")
 print("============================================================\n")

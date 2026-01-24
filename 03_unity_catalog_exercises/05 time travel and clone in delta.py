@@ -1,68 +1,60 @@
 # ============================================================
-# DELTA TIME TRAVEL MASTER SCRIPT (Single Script)
-# Covers: HISTORY, VERSION/TIMESTAMP time travel, AS OF reads,
-# RESTORE rollback, CLONE (shallow/deep), snapshot backups,
-# retention + VACUUM impact on time travel, and common scenarios.
-#
-# Best run in: Databricks notebook (dbutils.fs.ls works nicely).
+# DELTA TIME TRAVEL MASTER SCRIPT (ADLS + Azure Portal Visualization)
+# Covers: HISTORY, VERSION/TIMESTAMP time travel, RESTORE rollback,
+# CLONE (shallow/deep), snapshot backups, retention + VACUUM impact,
+# and common scenarios.
 # ============================================================
 
 from pyspark.sql import SparkSession
-import shutil, os, time
-from datetime import datetime, timedelta
+import time
+from datetime import datetime
 
 spark = SparkSession.builder.getOrCreate()
 
 # -----------------------------
-# 0) Choose table + location
+# EXERCISE 0) Choose table + ADLS location (stable so you can inspect in Azure Portal)
 # -----------------------------
+CATALOG = "ecom_dev"
+SCHEMA  = "delta_lab"
+
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
+spark.sql(f"USE CATALOG {CATALOG}")
+spark.sql(f"USE SCHEMA {SCHEMA}")
+
 TABLE = "demo_time_travel"
-DBFS_PATH = "/dbfs/tmp/delta_time_travel_demo/t1"   # physical driver path for inspection
-LOC = "/dbfs/tmp/delta_time_travel_demo/t1"         # used in SQL LOCATION
-LOG = f"{DBFS_PATH}/_delta_log"
+
+# Use your ADLS governed folder path
+LOC = "abfss://data@pstdatademo.dfs.core.windows.net/uc_data/t1"
+
+print("Using:", f"{CATALOG}.{SCHEMA}")
+print("TABLE:", TABLE)
+print("LOCATION:", LOC)
+
+# STOP (Azure Portal):
+# - Open the ADLS container in Azure Portal.
+# - Navigate to path: uc_data/t1
+# - Keep it open to observe:
+#   _delta_log folder + parquet data files after every commit.
+
 
 # -----------------------------
-# Helpers (optional): list files so you can "see" log evolution
+# EXERCISE 1) Clean start (metadata cleanup)
 # -----------------------------
-def ls(path):
-    print(f"\n--- LIST: {path} ---")
-    try:
-        display(dbutils.fs.ls(path))
-        return
-    except Exception:
-        pass
-    if os.path.exists(path):
-        for root, dirs, files in os.walk(path):
-            rel = root.replace(path, ".")
-            print(rel)
-            for d in sorted(dirs):
-                print("  [DIR] ", d)
-            for f in sorted(files):
-                print("  [FILE]", f)
-    else:
-        print("(path not found)")
-
-def show_table(msg):
-    print(f"\n--- {msg} ---")
-    spark.sql(f"SELECT * FROM {TABLE} ORDER BY id").show(truncate=False)
-
-def history_df():
-    return spark.sql(f"DESCRIBE HISTORY {TABLE}")
-
-# -----------------------------
-# 1) Clean start (drop + remove storage)
-# -----------------------------
-print("\n[STEP 1] Clean start\n")
+print("\n[EXERCISE 1] Clean start: DROP TABLE\n")
 spark.sql(f"DROP TABLE IF EXISTS {TABLE}")
-try:
-    shutil.rmtree(DBFS_PATH)
-except Exception:
-    pass
+
+print("If you want a truly clean start, delete this folder manually in Azure Portal now:")
+print("Path:", LOC)
+
+# STOP:
+# - In Azure Portal: delete the folder uc_data/t1 if you want a clean log from scratch.
+# - Then continue.
+
 
 # -----------------------------
-# 2) Create Delta table at known LOCATION
+# EXERCISE 2) Create Delta table at known LOCATION
 # -----------------------------
-print("\n[STEP 2] Create Delta table\n")
+print("\n[EXERCISE 2] Create Delta table at LOCATION\n")
 spark.sql(f"""
 CREATE TABLE {TABLE} (
   id INT,
@@ -73,19 +65,34 @@ USING DELTA
 LOCATION '{LOC}'
 """)
 
-ls(DBFS_PATH)
-ls(LOG)
+print("Azure Portal check:")
+print("- _delta_log should appear under the LOCATION")
+
+# STOP:
+# - Explain: Delta anatomy = data files + _delta_log (JSON commits, checkpoints).
+
 
 # -----------------------------
-# 3) Make multiple versions (each statement = 1 commit/version)
+# Helpers (no filesystem ops)
 # -----------------------------
-print("\n[STEP 3] Create multiple versions (INSERT/UPDATE/DELETE/MERGE)\n")
+def show_table(msg):
+    print(f"\n--- {msg} ---")
+    spark.sql(f"SELECT * FROM {TABLE} ORDER BY id").show(truncate=False)
+
+def history_df():
+    return spark.sql(f"DESCRIBE HISTORY {TABLE}")
+
+
+# -----------------------------
+# EXERCISE 3) Create multiple versions (each statement = 1 commit/version)
+# -----------------------------
+print("\n[EXERCISE 3] Create multiple versions (INSERT/UPDATE/DELETE/MERGE)\n")
 
 # V1: Insert initial rows
 spark.sql(f"INSERT INTO {TABLE} VALUES (1,'A',10),(2,'B',20),(3,'C',30)")
 show_table("After initial INSERT (new version committed)")
 
-# Capture a timestamp for TIMESTAMP AS OF demo (sleep to ensure different commit times)
+# Capture timestamps for TIMESTAMP AS OF demo (best effort)
 t_after_insert = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 time.sleep(2)
 
@@ -114,24 +121,34 @@ WHEN NOT MATCHED THEN INSERT *
 show_table("After MERGE (update id=3, insert id=4)")
 t_after_merge = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
+print("\nAzure Portal check now:")
+print("- _delta_log should have multiple new JSON commits (one per statement).")
+print("- Data parquet files may increase due to copy-on-write rewrites.")
+
+# STOP:
+# - each statement is one atomic transaction -> one new version.
+
+
 # -----------------------------
-# 4) DESCRIBE HISTORY (audit trail = your 'commit log')
+# EXERCISE 4) DESCRIBE HISTORY (audit trail)
 # -----------------------------
-print("\n[STEP 4] DESCRIBE HISTORY (versions & operations)\n")
+print("\n[EXERCISE 4] DESCRIBE HISTORY (versions & operations)\n")
 hist = history_df()
 hist.show(50, truncate=False)
 
-# Get min/max versions for later use
 minv = hist.agg({"version": "min"}).collect()[0][0]
 maxv = hist.agg({"version": "max"}).collect()[0][0]
 print(f"\nVersion range: min={minv}, max={maxv}")
 
-# -----------------------------
-# 5) TIME TRAVEL READS (Version AS OF)
-# -----------------------------
-print("\n[STEP 5] Time travel read by VERSION AS OF\n")
+# STOP:
+# - Explain what history columns mean: version, timestamp, operation, user, etc.
 
-# Choose a couple versions safely:
+
+# -----------------------------
+# EXERCISE 5) TIME TRAVEL READS (VERSION AS OF)
+# -----------------------------
+print("\n[EXERCISE 5] Time travel read by VERSION AS OF\n")
+
 v_insert = int(minv) + 1 if int(minv) + 1 <= int(maxv) else int(minv)
 v_latest = int(maxv)
 
@@ -141,26 +158,28 @@ spark.sql(f"SELECT * FROM {TABLE} VERSION AS OF {v_insert} ORDER BY id").show(tr
 print(f"\nRead table at VERSION AS OF {v_latest} (latest snapshot):")
 spark.sql(f"SELECT * FROM {TABLE} VERSION AS OF {v_latest} ORDER BY id").show(truncate=False)
 
-# Typical scenario: compare two snapshots (debugging)
-print("\nCompare older vs latest (example: what changed between versions?)")
+print("\nCompare older vs latest (approx diff):")
 older_df = spark.sql(f"SELECT * FROM {TABLE} VERSION AS OF {v_insert}")
 latest_df = spark.sql(f"SELECT * FROM {TABLE} VERSION AS OF {v_latest}")
 
-print("\nRows in latest but not in older (approx diff):")
+print("\nRows in latest but not in older:")
 latest_df.subtract(older_df).show(truncate=False)
 
-print("\nRows in older but not in latest (approx diff):")
+print("\nRows in older but not in latest:")
 older_df.subtract(latest_df).show(truncate=False)
 
-# -----------------------------
-# 6) TIME TRAVEL READS (Timestamp AS OF)
-# NOTE: Timestamp must be within history retention and before VACUUM removes files.
-# -----------------------------
-print("\n[STEP 6] Time travel read by TIMESTAMP AS OF\n")
+# STOP:
+# - VERSION AS OF is the most reliable “point-in-time” debugging tool.
 
-# We captured UTC timestamps right after certain operations (best effort demo)
-# Depending on workspace time settings, you may need to adjust to your timezone.
-# These reads are "as-of" points-in-time.
+
+# -----------------------------
+# EXERCISE 6) TIME TRAVEL READS (TIMESTAMP AS OF)
+# NOTE:
+# - Timestamp precision/timezone can vary.
+# - If it fails, use VERSION AS OF as the teaching fallback.
+# -----------------------------
+print("\n[EXERCISE 6] Time travel read by TIMESTAMP AS OF (best effort)\n")
+
 print(f"\nRead snapshot around 'after INSERT' timestamp (UTC): {t_after_insert}")
 try:
     spark.sql(f"SELECT * FROM {TABLE} TIMESTAMP AS OF '{t_after_insert}' ORDER BY id").show(truncate=False)
@@ -173,55 +192,67 @@ try:
 except Exception as e:
     print("TIMESTAMP AS OF read failed. Error:", str(e)[:300], "...")
 
-# -----------------------------
-# 7) RESTORE (Make an older snapshot the current table)
-# RESTORE creates a NEW version whose state matches the chosen older version.
-# It DOES NOT delete newer versions.
-# -----------------------------
-print("\n[STEP 7] RESTORE TABLE to an older VERSION\n")
+# STOP:
+# - Timestamp travel is convenient for auditors, but version travel is safer in demos.
 
-# Pick a version to restore to (often the version after first insert is a clean demo)
+
+# -----------------------------
+# EXERCISE 7) RESTORE (rollback)
+# RESTORE creates a NEW version that matches an older version.
+# It does NOT delete newer versions.
+# -----------------------------
+print("\n[EXERCISE 7] RESTORE TABLE to an older VERSION\n")
+
 restore_to = v_insert
 print(f"\nRestoring table to VERSION AS OF {restore_to}")
 spark.sql(f"RESTORE TABLE {TABLE} TO VERSION AS OF {restore_to}")
 
 show_table(f"After RESTORE to version {restore_to} (current state)")
-print("\nHistory after RESTORE (notice RESTORE is a new operation/version):")
+
+print("\nHistory after RESTORE (RESTORE is a new operation/version):")
 history_df().show(50, truncate=False)
 
+# STOP:
+# - RESTORE is like “rollback commit”, but history is still preserved.
+
+
 # -----------------------------
-# 8) CLONE (Snapshot copy for testing/backup)
-# SHALLOW CLONE: fast, shares underlying files (depends on them)
-# DEEP CLONE: full physical copy (more expensive)
+# EXERCISE 8) CLONE scenarios (Shallow vs Deep)
+# - SHALLOW CLONE: fast, shares underlying files (depends on them)
+# - DEEP CLONE: full physical copy (more expensive)
 # -----------------------------
-print("\n[STEP 8] CLONE scenarios (Shallow vs Deep)\n")
+print("\n[EXERCISE 8] CLONE scenarios (Shallow vs Deep)\n")
 
 CLONE_SHALLOW = "demo_time_travel_clone_shallow"
-CLONE_DEEP = "demo_time_travel_clone_deep"
+CLONE_DEEP    = "demo_time_travel_clone_deep"
 
 spark.sql(f"DROP TABLE IF EXISTS {CLONE_SHALLOW}")
 spark.sql(f"DROP TABLE IF EXISTS {CLONE_DEEP}")
 
-# Shallow clone (metadata clone): good for quick testing
 spark.sql(f"CREATE TABLE {CLONE_SHALLOW} SHALLOW CLONE {TABLE}")
 print(f"\nShallow clone created: {CLONE_SHALLOW}")
 spark.sql(f"SELECT * FROM {CLONE_SHALLOW} ORDER BY id").show(truncate=False)
 
-# Deep clone (full copy): good for long-term backup or isolation (can be expensive)
-# Uncomment if you want to run; it may take longer depending on table size.
+# Deep clone is optional (can be slower/costly)
+# Uncomment if you want to run:
 # spark.sql(f"CREATE TABLE {CLONE_DEEP} DEEP CLONE {TABLE}")
 # print(f"\nDeep clone created: {CLONE_DEEP}")
 # spark.sql(f"SELECT * FROM {CLONE_DEEP} ORDER BY id").show(truncate=False)
 
+# STOP:
+# - Shallow clone is like “fast snapshot for testing”.
+# - Deep clone is like “full backup copy”.
+
+
 # -----------------------------
-# 9) "Frozen snapshot" backup table (AS OF -> new independent table)
-# Useful for compliance snapshots / point-in-time backups
+# EXERCISE 9) Frozen snapshot backup table (AS OF -> new table)
+# Useful: compliance snapshots / point-in-time backups for reprocessing
 # -----------------------------
-print("\n[STEP 9] Create backup table from a historical snapshot\n")
+print("\n[EXERCISE 9] Create backup table from a historical snapshot\n")
+
 BACKUP_TABLE = "demo_time_travel_backup_v"
 spark.sql(f"DROP TABLE IF EXISTS {BACKUP_TABLE}")
 
-# Create a backup from the chosen historical version
 spark.sql(f"""
 CREATE TABLE {BACKUP_TABLE}
 USING DELTA
@@ -231,28 +262,25 @@ AS SELECT * FROM {TABLE} VERSION AS OF {restore_to}
 print(f"Backup table created from VERSION AS OF {restore_to}: {BACKUP_TABLE}")
 spark.sql(f"SELECT * FROM {BACKUP_TABLE} ORDER BY id").show(truncate=False)
 
+# STOP:
+# - This is a practical “snapshot backup” pattern.
+
+
 # -----------------------------
-# 10) VACUUM IMPACT on Time Travel (Demo-only)
-# IMPORTANT:
-# - Time travel/restore needs old files.
-# - VACUUM deletes old (unreferenced) files AFTER retention.
-# - Aggressive VACUUM can make old versions unrecoverable.
-# ----------------------------------------------------------
-print("\n[STEP 10] VACUUM impact on time travel (demo-only)\n"
-      "We will attempt an aggressive VACUUM to show that old versions can become unreadable.\n"
-      "DO NOT use RETAIN 0 HOURS in production casually.\n")
+# EXERCISE 10) VACUUM impact on Time Travel (demo-only)
+# - Aggressive vacuum can make old versions unrecoverable.
+# - Databricks blocks low retention by default; we disable safety briefly.
+# -----------------------------
+print("\n[EXERCISE 10] VACUUM impact on time travel (demo-only)\n"
+      "WARNING: RETAIN 0 HOURS is NOT recommended in production.\n")
 
-# Disable safety check to allow <168 hours retention (Databricks guardrail)
 spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "false")
-
-# Aggressive vacuum (may break time travel for older versions)
 spark.sql(f"VACUUM {TABLE} RETAIN 0 HOURS")
-
-# Re-enable safety
 spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "true")
 
-ls(DBFS_PATH)
-ls(LOG)
+print("Azure Portal check now:")
+print("- Some old/removed parquet files may be physically deleted")
+print("- Time travel/restore to older versions may fail now")
 
 print(f"\nTry time travel AFTER aggressive VACUUM to VERSION AS OF {restore_to} (may fail):")
 try:
@@ -265,19 +293,19 @@ except Exception as e:
 print("\nTry RESTORE AFTER aggressive VACUUM (may fail):")
 try:
     spark.sql(f"RESTORE TABLE {TABLE} TO VERSION AS OF {restore_to}")
-    print("RESTORE succeeded (same caveat: depends on what vacuum removed).")
+    print("RESTORE succeeded (depends on what VACUUM removed).")
 except Exception as e:
     print("RESTORE failed after VACUUM (expected if required files are gone).")
     print("Error:", str(e)[:400], "...")
 
 # -----------------------------
-# 11) Final Notes
+# FINAL TEACHING TAKEAWAYS
 # -----------------------------
 print("\n============================================================")
 print("TIME TRAVEL KEY TAKEAWAYS:")
 print("1) Time travel reads are non-destructive: VERSION AS OF / TIMESTAMP AS OF.")
-print("2) RESTORE makes an older snapshot current by creating a NEW version (does not delete history).")
-print("3) DESCRIBE HISTORY is your audit trail (operations, user, timestamps).")
+print("2) RESTORE makes an older snapshot current by creating a NEW version (history remains).")
+print("3) DESCRIBE HISTORY is your audit trail (operations, timestamps, versions).")
 print("4) CLONE helps testing/backup: SHALLOW is fast (shares files), DEEP copies data physically.")
-print("5) VACUUM can permanently remove files needed for old versions; after VACUUM those versions may be unrecoverable.")
+print("5) VACUUM can permanently remove files needed for old versions -> old versions may become unrecoverable.")
 print("============================================================\n")
