@@ -1,0 +1,6 @@
+order_id,customer_name,product,quantity,order_status
+201,Fiona Gallagher,Chair,1,Shipped
+202,George Miller,Desk,1,Pending
+203,Hannah Abbott,Lamp,2,Completed
+204,Ian Wright,Notebook,5,Completed
+205,Jane Doe,Pen,10,Pending

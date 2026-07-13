@@ -1,0 +1,6 @@
+order_id,customer_name,product,quantity,order_status
+301,Kevin Hart,Headphones,1,Completed
+302,Laura Palmer,Camera,1,Shipped
+303,Mike Ross,Printer,1,Cancelled
+304,Nina Simone,Ink Cartridge,2,Completed
+305,Oscar Isaac,Paper,1,Pending

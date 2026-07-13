@@ -1,0 +1,6 @@
+order_id,customer_name,product,quantity,order_status
+401,Peter Parker,Webcam,1,Shipped
+402,Quinn Fabray,Microphone,1,Completed
+403,Riley Reid,Speaker,2,Pending
+404,Sam Wilson,USB Hub,1,Completed
+405,Tina Fey,Charger,2,Cancelled

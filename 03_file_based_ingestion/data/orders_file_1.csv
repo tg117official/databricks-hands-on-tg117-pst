@@ -1,0 +1,6 @@
+order_id,customer_name,product,quantity,order_status
+101,Alice Johnson,Laptop,1,Completed
+102,Bob Smith,Mouse,2,Pending
+103,Charlie Davis,Keyboard,1,Shipped
+104,Diana Prince,Monitor,2,Cancelled
+105,Edward Norton,HDMI Cable,3,Completed

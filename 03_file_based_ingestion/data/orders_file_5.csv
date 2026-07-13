@@ -1,0 +1,6 @@
+order_id,customer_name,product,quantity,order_status
+501,Ulysses S. Grant,Tablet,1,Completed
+502,Victor Hugo,E-Reader,1,Pending
+503,Wendy Darling,Bag,1,Shipped
+504,Xavier Woods,Controller,2,Completed
+505,Yara Shahidi,Headset,1,Shipped
