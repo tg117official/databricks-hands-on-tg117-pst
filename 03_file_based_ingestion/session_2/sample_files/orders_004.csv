@@ -1,0 +1,3 @@
+order_id,customer_name,product,quantity,order_status
+1007,Priya,Tablet,1,PLACED
+1008,Sameer,USB Hub,3,PLACED
