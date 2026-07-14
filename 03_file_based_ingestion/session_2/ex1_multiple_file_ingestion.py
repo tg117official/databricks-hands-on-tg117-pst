@@ -33,11 +33,12 @@ from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 # 4. Keep the job running and copy orders_003.csv.
 # 5. Observe that Spark processes only the newly arrived file.
 
-BASE_DIR = Path(__file__).resolve().parent
-EXERCISE_DIR = BASE_DIR / "runtime" / "ex1"
-SOURCE_PATH = EXERCISE_DIR / "landing" / "orders" / "incoming"
-RAW_PATH = EXERCISE_DIR / "raw_zone" / "orders"
-CHECKPOINT_PATH = EXERCISE_DIR / "checkpoints" / "orders"
+# BASE_DIR = Path(__file__).resolve().parent
+# EXERCISE_DIR = BASE_DIR / "runtime" / "ex1"
+SOURCE_PATH = r"C:\Users\Sandeep\PycharmProjects\databricks-hands-on-tg117-pst\03_file_based_ingestion\session_2\source\input\orders_input"
+RAW_PATH = r"C:\Users\Sandeep\PycharmProjects\databricks-hands-on-tg117-pst\03_file_based_ingestion\session_2\raw_zone\orders-raw"
+CHECKPOINT_PATH = r"C:\Users\Sandeep\PycharmProjects\databricks-hands-on-tg117-pst\03_file_based_ingestion\session_2\checkpoint\orders-cp"
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--reset", action="store_true", help="Delete old Ex1 runtime data before starting")
@@ -86,7 +87,7 @@ raw_orders = (
 query = (
     raw_orders.writeStream
     .queryName("ex1_multiple_file_ingestion")
-    .format("parquet")
+    .format("csv")
     .outputMode("append")
     .option("path", str(RAW_PATH))
     .option("checkpointLocation", str(CHECKPOINT_PATH))

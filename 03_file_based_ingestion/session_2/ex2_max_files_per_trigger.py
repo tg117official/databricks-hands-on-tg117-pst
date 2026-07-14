@@ -36,7 +36,7 @@ BASE_DIR = Path(__file__).resolve().parent
 EXERCISE_DIR = BASE_DIR / "runtime" / "ex2"
 SOURCE_PATH = EXERCISE_DIR / "landing" / "orders" / "incoming"
 RAW_PATH = EXERCISE_DIR / "raw_zone" / "orders"
-CHECKPOINT_PATH = EXERCISE_DIR / "checkpoints" / "orders"
+CHECKPOINT_PATH = r"C:\Users\Sandeep\PycharmProjects\databricks-hands-on-tg117-pst\03_file_based_ingestion\session_2\checkpoint\orders_ex-2-cp"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--reset", action="store_true", help="Delete old Ex2 runtime data before starting")
