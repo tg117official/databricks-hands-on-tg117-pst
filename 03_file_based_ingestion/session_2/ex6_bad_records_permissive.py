@@ -84,7 +84,7 @@ raw_orders = (
 query = (
     raw_orders.writeStream
     .queryName("ex6_permissive_bad_record")
-    .format("parquet")
+    .format("csv")
     .outputMode("append")
     .option("path", str(RAW_PATH))
     .option("checkpointLocation", str(CHECKPOINT_PATH))

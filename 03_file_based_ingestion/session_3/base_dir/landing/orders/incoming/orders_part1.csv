@@ -1,0 +1,4 @@
+order_id,customer_id,product_id,quantity,order_status
+1001,201,501,2,Completed
+1002,202,503,1,Shipped
+1003,203,502,5,Completed

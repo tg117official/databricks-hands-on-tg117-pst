@@ -98,10 +98,8 @@ try:
     while query.isActive:
         # Wait up to five seconds. The loop continues while the query remains active.
         query.awaitTermination(5)
-
         print("Query status:")
         print(json.dumps(query.status, indent=2))
-
         progress = query.lastProgress
         if progress:
             summary = {
@@ -116,7 +114,6 @@ try:
             print(json.dumps(summary, indent=2))
         else:
             print("No completed micro-batch is available yet.")
-
         print("-" * 70)
 except KeyboardInterrupt:
     print("\nStopping Exercise 7 safely...")

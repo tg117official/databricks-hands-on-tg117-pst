@@ -1,0 +1,4 @@
+v1
+{"path":"file:///C:/Users/Sandeep/PycharmProjects/databricks-hands-on-tg117-pst/03_file_based_ingestion/session_2/source/input/orders_input/orders_002.csv","timestamp":1784015456000,"batchId":1}
+{"path":"file:///C:/Users/Sandeep/PycharmProjects/databricks-hands-on-tg117-pst/03_file_based_ingestion/session_2/source/input/orders_input/orders_003.csv","timestamp":1784015456000,"batchId":1}
+{"path":"file:///C:/Users/Sandeep/PycharmProjects/databricks-hands-on-tg117-pst/03_file_based_ingestion/session_2/source/input/orders_input/orders_004.csv","timestamp":1784015456000,"batchId":1}

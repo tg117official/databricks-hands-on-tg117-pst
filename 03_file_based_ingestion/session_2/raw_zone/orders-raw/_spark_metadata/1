@@ -1,0 +1,4 @@
+v1
+{"path":"file:///C:/Users/Sandeep/PycharmProjects/databricks-hands-on-tg117-pst/03_file_based_ingestion/session_2/raw_zone/orders-raw/part-00000-38def63e-34ac-4e59-8c20-74f38076bca7-c000.snappy.parquet","size":2963,"isDir":false,"modificationTime":1784126768410,"blockReplication":1,"blockSize":33554432,"action":"add"}
+{"path":"file:///C:/Users/Sandeep/PycharmProjects/databricks-hands-on-tg117-pst/03_file_based_ingestion/session_2/raw_zone/orders-raw/part-00001-1a0a9041-7929-49ec-b7e8-3d98809038f3-c000.snappy.parquet","size":2969,"isDir":false,"modificationTime":1784126768397,"blockReplication":1,"blockSize":33554432,"action":"add"}
+{"path":"file:///C:/Users/Sandeep/PycharmProjects/databricks-hands-on-tg117-pst/03_file_based_ingestion/session_2/raw_zone/orders-raw/part-00002-75b739b7-b71e-44f3-8a33-bec9c2c067e3-c000.snappy.parquet","size":2964,"isDir":false,"modificationTime":1784126768407,"blockReplication":1,"blockSize":33554432,"action":"add"}
