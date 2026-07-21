@@ -108,10 +108,30 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "schema": CUSTOMER_SCHEMA_V1,
         "schema_version": "v1",
         "enforce_schema": True,
-        "expected": (
-            "The pipeline still exposes only four columns. phone_number is not "
-            "captured, demonstrating that source evolution does not "
-            "automatically evolve an explicit Spark schema."
+        "problem": (
+            "The incoming file follows schema V2 and contains phone_number, but "
+            "the streaming query still applies schema V1. The new field is not "
+            "present in the DataFrame or raw output."
+        ),
+        "spark_behavior": (
+            "Spark builds the DataFrame from the explicitly declared V1 fields. "
+            "The query can complete successfully even though phone_number is "
+            "not captured."
+        ),
+        "impact": (
+            "The pipeline appears healthy, but useful source data is silently "
+            "lost."
+        ),
+        "solutions": [
+            "Upgrade the explicit schema to V2 and add phone_number as a nullable field.",
+            "Validate the incoming header before ingestion and alert when unapproved extra columns appear.",
+            "Run V1 and V2 readers separately during a controlled source cutover.",
+            "Preserve the original source file unchanged so it can be reparsed if the pipeline schema was outdated.",
+        ],
+        "recommended": (
+            "For an approved source change, introduce schema V2, keep the new "
+            "field nullable during the transition, test both V1 and V2 files, "
+            "and use a versioned checkpoint and output location."
         ),
     },
     "old_file_new_schema": {
@@ -120,9 +140,28 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "schema": CUSTOMER_SCHEMA_V2,
         "schema_version": "v2",
         "enforce_schema": True,
-        "expected": (
-            "phone_number should be null because the old file does not contain "
-            "the newly added trailing field."
+        "problem": (
+            "The pipeline expects phone_number, but an older producer still "
+            "sends the four-column V1 file."
+        ),
+        "spark_behavior": (
+            "The existing fields are read and the missing trailing phone_number "
+            "field is stored as null."
+        ),
+        "impact": (
+            "This is acceptable only when phone_number is optional. If it is a "
+            "required business field, the record is incomplete."
+        ),
+        "solutions": [
+            "Keep phone_number nullable for a limited transition period.",
+            "Apply a default only when the default has a valid business meaning.",
+            "Route old and new file versions through separate schema-specific readers.",
+            "Reject old-format files after an agreed cutover date.",
+            "Add a data-quality check and monitor the percentage of missing phone numbers.",
+        ],
+        "recommended": (
+            "Allow null during a time-bound migration, monitor old-format file "
+            "usage, and enforce V2 after every producer has completed the cutover."
         ),
     },
     "reordered_columns_unsafe": {
@@ -131,9 +170,28 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "schema": CUSTOMER_SCHEMA_V2,
         "schema_version": "v2",
         "enforce_schema": True,
-        "expected": (
-            "The query can succeed while email is stored in city and city is "
-            "stored in email. This demonstrates silent data corruption."
+        "problem": (
+            "The source changes the order of email and city, while the pipeline "
+            "continues applying schema V2 by column position."
+        ),
+        "spark_behavior": (
+            "Because both fields are strings, Spark can store email in city and "
+            "city in email without producing a datatype error."
+        ),
+        "impact": (
+            "The query succeeds but the raw data is semantically wrong. This is "
+            "silent data corruption."
+        ),
+        "solutions": [
+            "Enable header validation with enforceSchema set to false.",
+            "Validate file headers before moving files into the monitored folder.",
+            "Create an explicit mapping only for a known and approved schema version.",
+            "Use a self-describing format such as Parquet, Avro, or JSON when the source can support it.",
+        ],
+        "recommended": (
+            "Do not accept unexpected reordering. Reject the file, alert the "
+            "source owner, and add an explicit versioned mapping only when the "
+            "change is approved."
         ),
     },
     "reordered_columns_safe": {
@@ -142,9 +200,26 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "schema": CUSTOMER_SCHEMA_V2,
         "schema_version": "v2",
         "enforce_schema": False,
-        "expected": (
-            "The micro-batch should fail because the header order does not match "
-            "the expected customer data contract."
+        "problem": (
+            "The incoming header order does not match the agreed V2 contract."
+        ),
+        "spark_behavior": (
+            "Header validation detects the mismatch and the micro-batch fails "
+            "before incorrect rows are written."
+        ),
+        "impact": (
+            "Ingestion pauses for this file, but trusted data is protected from "
+            "silent corruption."
+        ),
+        "solutions": [
+            "Correct the file at the source and resend it in the agreed order.",
+            "Quarantine the file and notify the source owner.",
+            "Add a controlled mapping for the new order only when it becomes an approved contract version.",
+            "Move to a self-describing file format if column reordering is expected frequently.",
+        ],
+        "recommended": (
+            "Keep header validation enabled. Reject or quarantine the unexpected "
+            "file instead of disabling the safeguard."
         ),
     },
     "renamed_columns": {
@@ -153,9 +228,28 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "schema": CUSTOMER_SCHEMA_V2,
         "schema_version": "v2",
         "enforce_schema": False,
-        "expected": (
-            "The file should be rejected because full_name and email_address do "
-            "not match the expected header. A rename is a breaking change."
+        "problem": (
+            "The source sends full_name and email_address, while the contract "
+            "still defines customer_name and email."
+        ),
+        "spark_behavior": (
+            "Header validation rejects the file because the supplied names no "
+            "longer match schema V2."
+        ),
+        "impact": (
+            "The ingestion contract and any downstream code using the old names "
+            "are affected."
+        ),
+        "solutions": [
+            "Ask the producer to restore the agreed column names.",
+            "Explicitly map full_name to customer_name and email_address to email during a planned transition.",
+            "Run separate V1 and V2 contract versions while consumers migrate.",
+            "Publish a new schema version and update downstream queries, reports, and APIs.",
+        ],
+        "recommended": (
+            "Treat a rename as a breaking change. Use an explicit approved "
+            "mapping or a new contract version; never rely on positional mapping "
+            "to hide the rename."
         ),
     },
     "datatype_change_old_schema": {
@@ -164,10 +258,28 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "schema": CUSTOMER_SCHEMA_V2,
         "schema_version": "v2",
         "enforce_schema": True,
-        "expected": (
-            "Under permissive parsing, C110 can become null because it cannot be "
-            "parsed as an integer. The query may succeed while losing the "
-            "business key."
+        "problem": (
+            "The source starts sending customer IDs such as C110, but schema V2 "
+            "still defines customer_id as IntegerType."
+        ),
+        "spark_behavior": (
+            "Under permissive CSV parsing, the unparseable identifier can become "
+            "null while the query continues."
+        ),
+        "impact": (
+            "The customer business key is lost, which can break joins, updates, "
+            "deduplication, and reconciliation."
+        ),
+        "solutions": [
+            "Reject records or files when the business key cannot be parsed.",
+            "Read identifiers as strings and validate their allowed pattern separately.",
+            "Use a strict parsing mode or a data-quality rule for mandatory keys.",
+            "Create a new schema version and migrate downstream consumers.",
+        ],
+        "recommended": (
+            "Store identifiers as strings when alphanumeric values are possible, "
+            "make the key mandatory, validate its format, and deploy the change "
+            "as schema V3."
         ),
     },
     "datatype_change_new_schema": {
@@ -176,9 +288,28 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "schema": CUSTOMER_SCHEMA_V3,
         "schema_version": "v3",
         "enforce_schema": True,
-        "expected": (
-            "C110 should be stored successfully as a string. This demonstrates a "
-            "controlled pipeline upgrade for a breaking datatype change."
+        "problem": (
+            "Schema V3 can ingest C110, but older tables, joins, APIs, or reports "
+            "may still expect an integer customer_id."
+        ),
+        "spark_behavior": (
+            "Spark now preserves C110 correctly as a string. Numeric historical "
+            "IDs are also representable as strings."
+        ),
+        "impact": (
+            "The ingestion problem is solved, but downstream compatibility still "
+            "has to be managed."
+        ),
+        "solutions": [
+            "Adopt string as the canonical datatype for customer_id across the platform.",
+            "Temporarily provide a compatibility column or view for consumers that still require numeric IDs.",
+            "Migrate downstream schemas and joins in a controlled sequence.",
+            "Test both historic numeric IDs and new alphanumeric IDs before deployment.",
+        ],
+        "recommended": (
+            "Use string as the canonical customer identifier, version the change, "
+            "test old and new values, and update downstream consumers before the "
+            "old numeric contract is retired."
         ),
     },
 }
@@ -202,11 +333,30 @@ def list_scenarios() -> None:
 
 
 def explain_scenario(scenario_name: str) -> None:
-    """Display the scenario purpose and expected behaviour."""
+    """Display the problem, observed behaviour, and response options."""
     config = _get_scenario(scenario_name)
     print(f"\n{config['title']}")
     print("-" * len(config["title"]))
-    print(config["expected"])
+
+    if scenario_name == "baseline":
+        print(config["expected"])
+    else:
+        print("\nProblem")
+        print(config["problem"])
+
+        print("\nWhat Spark does")
+        print(config["spark_behavior"])
+
+        print("\nWhy it matters")
+        print(config["impact"])
+
+        print("\nPossible solutions")
+        for number, solution in enumerate(config["solutions"], start=1):
+            print(f"{number}. {solution}")
+
+        print("\nRecommended approach")
+        print(config["recommended"])
+
     print(f"\nSchema version: {config['schema_version']}")
     print(f"enforceSchema: {str(config['enforce_schema']).lower()}")
     print(f"Sample file: {SAMPLE_DIR / config['file_name']}")
@@ -339,22 +489,25 @@ def process_available_data(scenario_name: str) -> None:
 
 def show_raw_output(scenario_name: str) -> DataFrame | None:
     """
-    Read all Parquet files created for the scenario and display the result.
+    Read all CSV files created for the scenario and display the result.
 
     recursiveFileLookup is used because every micro-batch is stored in a
-    separate batch_<id> directory.
+    separate batch_<id> directory. The output CSV files contain headers so they
+    can also be opened directly without using Spark.
     """
     paths = scenario_paths(scenario_name)
-    parquet_files = list(paths["raw"].rglob("*.parquet"))
+    csv_files = list(paths["raw"].rglob("*.csv"))
 
-    if not parquet_files:
-        print(f"No Parquet output exists for: {scenario_name}")
+    if not csv_files:
+        print(f"No CSV output exists for: {scenario_name}")
         return None
 
     result_df = (
         spark.read
+        .option("header", "true")
+        .option("inferSchema", "true")
         .option("recursiveFileLookup", "true")
-        .parquet(str(paths["raw"]))
+        .csv(str(paths["raw"]))
     )
 
     result_df.printSchema()
@@ -445,14 +598,26 @@ def _create_batch_writer(raw_path: Path) -> Callable[[DataFrame, int], None]:
         # overwrite applies only to this unique batch folder. If Spark retries
         # the same batch ID before committing checkpoint progress, the same
         # folder is replaced instead of creating a second copy of that batch.
+        # coalesce(1) is used only to make this local classroom output easy to
+        # open. Each batch folder contains one CSV data file with a header.
+        # Large production datasets should normally keep parallel output files.
         (
-            output_df.write
-            .format("parquet")
+            output_df.coalesce(1).write
+            .format("csv")
+            .option("header", "true")
             .mode("overwrite")
             .save(str(batch_output_path))
         )
 
-        print(f"Batch {batch_id} written to: {batch_output_path}")
+        csv_files = list(batch_output_path.glob("part-*.csv"))
+        if csv_files:
+            readable_name = batch_output_path / f"customers_batch_{batch_id:020d}.csv"
+            if readable_name.exists():
+                readable_name.unlink()
+            csv_files[0].rename(readable_name)
+            print(f"Batch {batch_id} CSV written to: {readable_name}")
+        else:
+            print(f"Batch {batch_id} written to: {batch_output_path}")
 
     return write_one_batch
 

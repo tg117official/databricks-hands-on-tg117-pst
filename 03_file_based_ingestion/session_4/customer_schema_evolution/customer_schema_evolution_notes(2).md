@@ -392,11 +392,11 @@ Before testing schema changes, we need one known-good result. Every later scenar
 
 ---
 
-# 8. Exercise 2 — A new column arrives, but Spark still uses the old schema
+# 8. Exercise 2 — New data arrives with a new column, but the pipeline still uses the old schema
 
-## Scenario
+## Problem
 
-The source adds `phone_number`, but the pipeline still uses schema V1.
+The incoming customer file follows **schema V2** and contains a new field called `phone_number`.
 
 ```csv
 customer_id,customer_name,city,email,phone_number
@@ -404,20 +404,65 @@ customer_id,customer_name,city,email,phone_number
 104,Rohan Das,Delhi,rohan@example.com,9812345678
 ```
 
-Schema V1 still expects only:
+The running Spark query still applies **schema V1**:
 
 ```text
 customer_id, customer_name, city, email
 ```
 
-## Flow
+```mermaid
+flowchart LR
+    A[Incoming file: V2] --> B[Streaming query: V1]
+    B --> C[DataFrame has only V1 fields]
+    C --> D[phone_number is unavailable]
+```
+
+## What Spark does
+
+Spark creates the DataFrame from the fields declared in the explicit schema. The source file may contain another value, but `phone_number` is not part of schema V1 and therefore is not available in the raw output.
+
+The query may still succeed:
+
+```text
+Pipeline status: successful
+phone_number: not captured
+```
+
+## Why this matters
+
+This is **silent data loss**. A healthy-looking job does not guarantee that every source field was retained.
 
 ```mermaid
 flowchart TD
-    A[Source file contains 5 columns] --> B[Pipeline schema contains 4 columns]
-    B --> C[Spark creates a DataFrame with the 4 declared fields]
-    C --> D[phone_number is not represented in the output schema]
-    D --> E[Phone data is lost]
+    A[Source adds a field] --> B[Old Spark schema remains active]
+    B --> C[Job succeeds]
+    C --> D[New field is lost]
+    D --> E[Problem may be noticed much later]
+```
+
+## Possible solutions
+
+| Option | How it helps | Trade-off |
+|---|---|---|
+| Upgrade to schema V2 | Captures `phone_number` | Requires testing and controlled deployment |
+| Validate the header before ingestion | Detects unapproved extra fields | Adds a validation step |
+| Run V1 and V2 readers during cutover | Supports both source versions | More operational complexity |
+| Preserve the original source file | Allows later reprocessing | Needs retention and replay planning |
+
+## Recommended approach
+
+For an approved source change:
+
+```text
+Confirm the new contract
+        ↓
+Add phone_number as nullable in schema V2
+        ↓
+Test both old and new files
+        ↓
+Use a versioned checkpoint and raw path
+        ↓
+Monitor whether phone_number is arriving
 ```
 
 ## Run
@@ -436,41 +481,36 @@ stop_customer_stream(scenario)
 
 ## Expected observation
 
-The output still contains only the V1 customer columns. `phone_number` is not retained.
+The output contains only the V1 business fields:
 
 ```text
-root
- |-- customer_id: integer
- |-- customer_name: string
- |-- city: string
- |-- email: string
+customer_id
+customer_name
+city
+email
 ```
 
-## Important lesson
-
-An explicit Spark schema does not automatically change merely because a new column arrives in a source file.
-
-```text
-Source changed
-      ≠
-Pipeline changed
-```
-
-The pipeline must be deliberately upgraded to schema V2 if the new field needs to be stored.
+`phone_number` is not visible.
 
 ## Interview connection
 
-**Question:** The source added a new CSV column, but no pipeline failure occurred. Is the change safely handled?
+**Question:** A source added a CSV column, the Spark query succeeded, but the new field is missing. Why?
 
-**Answer:** Not necessarily. The pipeline may continue using the old explicit schema and silently ignore information that is not represented in that schema. The raw output must be inspected and the schema must be deliberately versioned.
+**Answer:** The query used an explicit older schema. Spark does not automatically extend that schema merely because another column appears in the file.
 
 ---
 
-# 9. Exercise 3 — An old file arrives after upgrading to schema V2
+# 9. Exercise 3 — An old file arrives after the pipeline upgrades to schema V2
 
-## Scenario
+## Problem
 
-The pipeline now expects five columns, but an older producer still sends the V1 format.
+The pipeline now expects schema V2:
+
+```text
+customer_id, customer_name, city, email, phone_number
+```
+
+An older producer still sends a V1 file:
 
 ```csv
 customer_id,customer_name,city,email
@@ -478,20 +518,50 @@ customer_id,customer_name,city,email
 106,Manish Gupta,Indore,manish@example.com
 ```
 
-Schema V2 expects:
+## What Spark does
 
-```text
-customer_id, customer_name, city, email, phone_number
+The existing fields are mapped and the missing trailing field becomes `null`.
+
+```mermaid
+flowchart LR
+    A[Old file: 4 fields] --> B[Schema V2: 5 fields]
+    B --> C[Map the first 4 fields]
+    C --> D[phone_number = null]
 ```
 
-## Flow
+## Why this matters
+
+This may be acceptable when `phone_number` is optional. It becomes a problem when the new field is mandatory for business processing.
+
+```text
+Optional field missing
+    → Temporary compatibility
+
+Required field missing
+    → Incomplete record
+```
+
+## Possible solutions
+
+| Option | Suitable when |
+|---|---|
+| Keep the new field nullable | Old producers need a transition period |
+| Apply a default value | The default has a genuine business meaning |
+| Route V1 and V2 files separately | Both formats must coexist for longer |
+| Reject V1 files after a cutover date | All producers should already use V2 |
+| Monitor null percentage | The migration progress must be measurable |
+
+## Recommended approach
+
+Use a time-bound compatibility window:
 
 ```mermaid
 flowchart TD
-    A[Old file contains 4 columns] --> B[Schema V2 expects 5 columns]
-    B --> C[First 4 fields are mapped]
-    C --> D[Missing phone_number becomes null]
-    D --> E[Old and new files can coexist temporarily]
+    A[Deploy schema V2 with nullable phone_number] --> B[Accept V1 and V2 temporarily]
+    B --> C[Monitor old-format files and null values]
+    C --> D{All producers migrated?}
+    D -->|No| B
+    D -->|Yes| E[Enforce the V2 contract]
 ```
 
 ## Run
@@ -511,43 +581,23 @@ stop_customer_stream(scenario)
 ## Expected observation
 
 ```text
-customer_id      = 105
-customer_name    = Anita Rao
-city             = Bengaluru
-email            = anita@example.com
-phone_number     = null
-schema_version   = v2
-```
-
-## Why this can be compatible
-
-A new field is easier to introduce when:
-
-- It is added at the end of a positional file.
-- It is nullable.
-- Older producers are allowed to omit it temporarily.
-- Downstream consumers can tolerate null values.
-
-```mermaid
-flowchart LR
-    A[Old producer] -->|No phone number| C[Schema V2]
-    B[New producer] -->|Includes phone number| C
-    C --> D[One common raw structure]
-    D --> E[Old records: null]
-    D --> F[New records: actual value]
+customer_id    = 105
+customer_name  = Anita Rao
+phone_number   = null
+schema_version = v2
 ```
 
 ## Interview connection
 
-**Question:** How would you roll out a newly added customer field without breaking older source systems?
+**Question:** How can a new field be introduced without immediately breaking old producers?
 
-**Answer:** Add it as a nullable field, support both old and new producers during a transition period, record the schema version, monitor missing values, and agree on a deadline for retiring the old format.
+**Answer:** Add it as nullable, support both formats for a limited period, monitor missing values, and enforce the new contract after the cutover.
 
 ---
 
 # 10. Exercise 4A — Reordered columns with positional mapping
 
-## Scenario
+## Problem
 
 The pipeline expects:
 
@@ -555,44 +605,60 @@ The pipeline expects:
 customer_id, customer_name, city, email, phone_number
 ```
 
-The source sends:
+The file sends:
 
 ```text
 customer_id, customer_name, email, city, phone_number
 ```
-
-File content:
 
 ```csv
 customer_id,customer_name,email,city,phone_number
 107,Vikas Kumar,vikas@example.com,Hyderabad,9898989898
 ```
 
-The third and fourth columns have exchanged positions.
+## What Spark does
 
-## Flow
+With positional mapping, the third value goes into the third schema field and the fourth value goes into the fourth schema field.
 
 ```mermaid
 flowchart LR
-    subgraph File_positions[CSV positions]
-        A1[Position 1: customer_id]
-        A2[Position 2: customer_name]
-        A3[Position 3: email]
-        A4[Position 4: city]
-    end
-
-    subgraph Schema_positions[Schema V2 positions]
-        B1[Position 1: customer_id]
-        B2[Position 2: customer_name]
-        B3[Position 3: city]
-        B4[Position 4: email]
-    end
-
-    A3 --> B3
-    A4 --> B4
+    A[File position 3: email] --> B[Schema position 3: city]
+    C[File position 4: city] --> D[Schema position 4: email]
 ```
 
-Because `city` and `email` are both strings, Spark can place the values into the wrong fields without a datatype failure.
+Because both values are strings, Spark may not raise a datatype error.
+
+## Why this matters
+
+The query can succeed while storing incorrect meaning:
+
+```text
+city  = vikas@example.com
+email = Hyderabad
+```
+
+This is **silent data corruption**.
+
+## Possible solutions
+
+| Option | Result |
+|---|---|
+| Set `enforceSchema` to `false` | Header mismatch becomes visible |
+| Validate headers before landing | Bad files are stopped earlier |
+| Add an approved version-specific mapping | Known reordering can be handled explicitly |
+| Use Parquet, Avro, or JSON | Column names travel with the data |
+
+## Recommended approach
+
+Unexpected column reordering should be rejected. Add an explicit mapping only when the new order is planned, documented, and versioned.
+
+```mermaid
+flowchart TD
+    A[Reordered header detected] --> B{Approved schema version?}
+    B -->|No| C[Reject and alert]
+    B -->|Yes| D[Apply explicit mapping]
+    D --> E[Test before release]
+```
 
 ## Run
 
@@ -610,49 +676,58 @@ stop_customer_stream(scenario)
 
 ## Expected observation
 
-```text
-city  = vikas@example.com
-email = Hyderabad
-```
+The query may complete, but `city` and `email` contain each other's values.
 
-The query may remain successful.
+## Interview connection
 
-```mermaid
-flowchart TD
-    A[Query status: successful] --> B{Is the data correct?}
-    B -->|No| C[Silent corruption]
-    C --> D[Wrong data can reach downstream systems]
-```
+**Question:** Why can reordered CSV columns be more dangerous than a datatype failure?
 
-## Important lesson
-
-CSV is a positional format. A header may be visible to us, but values can still be interpreted according to the supplied schema position.
-
-A successful query does not prove that the column meanings are correct.
+**Answer:** When the swapped columns share the same datatype, the query can succeed and store semantically incorrect data without an obvious error.
 
 ---
 
 # 11. Exercise 4B — Reordered columns with header validation
 
-## Scenario
+## Problem
 
-The file is the same reordered file, but now the query uses:
+The file uses a different column order than schema V2. This time the query enables header validation:
 
 ```python
 .option("enforceSchema", "false")
 ```
 
-This asks Spark to compare the CSV header with the supplied schema instead of blindly accepting the positional structure.
+## What Spark does
 
-## Flow
+Spark compares the supplied schema with the CSV header. The mismatch causes the micro-batch to fail before incorrect output is written.
 
 ```mermaid
 flowchart TD
-    A[Reordered CSV file arrives] --> B[Compare file header with schema V2]
-    B --> C{Do names and positions match?}
-    C -->|No| D[Fail the micro-batch]
-    D --> E[Investigate the source change]
-    C -->|Yes| F[Continue processing]
+    A[File arrives] --> B[Compare header with V2 contract]
+    B --> C{Names and positions match?}
+    C -->|Yes| D[Process]
+    C -->|No| E[Fail visibly]
+    E --> F[No incorrect raw output]
+```
+
+## Why this matters
+
+The visible failure protects the raw zone. The immediate problem is a stopped file, but the larger problem—silent corruption—is prevented.
+
+## Possible solutions
+
+1. Correct and resend the file from the source.
+2. Quarantine it and notify the source owner.
+3. Introduce an explicit versioned mapping if the new order is approved.
+4. Move to a self-describing format when frequent reordering is unavoidable.
+
+## Recommended approach
+
+Keep header validation enabled. Do not disable the safeguard simply to make the file pass.
+
+```text
+Visible failure + clean data
+        is safer than
+Successful job + incorrect data
 ```
 
 ## Run
@@ -667,79 +742,75 @@ arrive_file(scenario)
 process_available_data(scenario)
 ```
 
-The last command is expected to report a header mismatch.
-
 Inspect the query:
 
 ```python
 show_query_status(scenario)
-```
-
-Stop it:
-
-```python
 stop_customer_stream(scenario)
 ```
 
 ## Expected observation
 
-The file should be rejected rather than written with incorrect mappings.
-
-The exact error text may differ by Spark version, but the important result is:
-
-```text
-Expected header order
-      ≠
-Received header order
-      ↓
-Visible failure
-```
-
-## Why this is safer
-
-```text
-Unsafe approach:
-Pipeline succeeds + data is wrong
-
-Safer approach:
-Pipeline fails + problem is visible
-```
+The micro-batch reports a header mismatch and no customer CSV batch is produced.
 
 ---
 
 # 12. Exercise 5 — Renamed columns
 
-## Scenario
+## Problem
 
-The source changes:
+The source changes the field names:
 
 ```text
 customer_name → full_name
 email         → email_address
 ```
 
-File content:
-
 ```csv
 customer_id,full_name,city,email_address,phone_number
 109,Meera Joshi,Jaipur,meera@example.com,9696969696
 ```
 
-Schema V2 still expects:
+The running contract still expects `customer_name` and `email`.
 
-```text
-customer_id,customer_name,city,email,phone_number
-```
+## What Spark does
 
-## Flow
+With header validation enabled, Spark rejects the file because the names do not match schema V2.
+
+## Why this matters
+
+A rename affects more than ingestion:
 
 ```mermaid
-flowchart LR
-    A[Source team renames columns] --> B[Existing data contract no longer matches]
-    B --> C[Header validation]
-    C --> D[File rejected]
-    D --> E[Choose a controlled migration approach]
+flowchart TD
+    A[Column rename] --> B[Streaming schema]
+    A --> C[SQL queries]
+    A --> D[Joins and transformations]
+    A --> E[Dashboards]
+    A --> F[APIs and reports]
 ```
+
+Even when the underlying value is unchanged, the contract is breaking.
+
+## Possible solutions
+
+| Option | When to use it |
+|---|---|
+| Ask the source to restore old names | Change was accidental or unapproved |
+| Map new names to canonical old names | Controlled temporary migration |
+| Run old and new contract versions | Consumers need time to migrate |
+| Publish schema V3/new contract | Rename is permanent and approved |
+
+Example controlled mapping:
+
+```text
+full_name     → customer_name
+email_address → email
+```
+
+## Recommended approach
+
+Treat renames as breaking changes. Use explicit mappings or a new version; never depend on column position to make renamed fields appear compatible.
 
 ## Run
 
@@ -753,92 +824,33 @@ arrive_file(scenario)
 process_available_data(scenario)
 ```
 
-Inspect the failed query:
+Inspect and stop:
 
 ```python
 show_query_status(scenario)
-```
-
-Stop it:
-
-```python
 stop_customer_stream(scenario)
 ```
 
-## Why a rename is a breaking change
+## Expected observation
 
-Even when the values have not changed, the contract has changed.
-
-Potentially affected components include:
-
-```mermaid
-flowchart TD
-    A[Column rename] --> B[Ingestion schema]
-    A --> C[Raw data readers]
-    A --> D[SQL queries]
-    A --> E[Dashboards]
-    A --> F[APIs and reports]
-```
-
-## Possible production responses
-
-### Reject the new file
-
-Use this when the producer changed the contract without approval.
-
-### Support both versions temporarily
-
-Example mapping:
-
-```text
-full_name     → customer_name
-email_address → email
-```
-
-This should be explicit and temporary, not an accidental positional mapping.
-
-### Release a new version
-
-```text
-customers_v1 → old column names
-customers_v2 → new column names
-```
-
-This is useful when downstream consumers need time to migrate.
+The file fails header validation.
 
 ## Interview connection
 
-**Question:** The source changed only the column name, not the value. Why can this still be breaking?
+**Question:** Why is a rename breaking even when the value has not changed?
 
-**Answer:** Pipelines and downstream systems refer to fields by their agreed names. A rename can break header validation, transformations, SQL queries, mappings, reports, and APIs even though the underlying values look similar.
+**Answer:** Every consumer that refers to the original name may fail or interpret a different contract. The rename must be coordinated and versioned.
 
 ---
 
 # 13. Exercise 6A — Datatype change using the old schema
 
-## Scenario
+## Problem
 
-The source changes `customer_id` from a numeric value to an alphanumeric value.
-
-Old values:
-
-```text
-101
-102
-103
-```
-
-New value:
+The source starts sending an alphanumeric customer identifier:
 
 ```text
 C110
-```
-
-File content:
-
-```csv
-customer_id,customer_name,city,email,phone_number
-C110,Arjun Mehta,Jaipur,arjun@example.com,9595959595
 ```
 
 Schema V2 still defines:
@@ -847,15 +859,32 @@ Schema V2 still defines:
 StructField("customer_id", IntegerType(), True)
 ```
 
-## Flow
+## What Spark does
+
+Under permissive parsing, the value cannot be converted to an integer and may become `null` while the query continues.
 
 ```mermaid
 flowchart TD
-    A[CSV value C110] --> B[IntegerType expected]
-    B --> C[Value cannot be parsed as an integer]
-    C --> D[Permissive parsing may produce null]
-    D --> E[Business key is lost]
+    A[C110 arrives] --> B[IntegerType expected]
+    B --> C[Parsing fails]
+    C --> D[customer_id becomes null]
+    D --> E[Query may still succeed]
 ```
+
+## Why this matters
+
+The business key is lost. That can affect joins, updates, deduplication, history, and reconciliation.
+
+## Possible solutions
+
+1. Reject the record or file when a mandatory key cannot be parsed.
+2. Read identifiers as strings and validate the accepted pattern separately.
+3. Use a strict parsing or data-quality rule for business keys.
+4. Create a new schema version and migrate downstream consumers.
+
+## Recommended approach
+
+Identifiers should generally be stored as strings when alphanumeric values are possible. Make the key mandatory, validate its format, and release schema V3 through a controlled migration.
 
 ## Run
 
@@ -877,57 +906,54 @@ stop_customer_stream(scenario)
 customer_id = null
 ```
 
-The query can still complete because the reader uses permissive parsing.
-
-## Why this is serious
-
-`customer_id` is not just another field. It is the business key used to identify a customer.
-
-A missing business key can affect:
-
-- Deduplication
-- Joins
-- Updates
-- Customer history
-- Reconciliation
-- Reporting
-
-```mermaid
-flowchart LR
-    A[Null customer_id] --> B[Cannot reliably identify customer]
-    B --> C[Joins may fail]
-    B --> D[Duplicates may appear]
-    B --> E[Updates may not match]
-```
-
 ## Interview connection
 
-**Question:** Should a pipeline continue when a business key cannot be parsed?
+**Question:** Should a pipeline accept a row when its business key becomes null during parsing?
 
-**Answer:** Usually the record or file should be rejected or isolated, and an alert should be raised. Allowing a null business key into trusted processing can create larger downstream problems.
+**Answer:** Normally no. The row or file should be rejected or isolated, and the contract change should be investigated.
 
 ---
 
-# 14. Exercise 6B — Controlled upgrade to schema V3
+# 14. Exercise 6B — Schema V3 accepts the new identifier
 
-## Scenario
+## Problem
 
-The pipeline is deliberately changed so that `customer_id` is stored as a string.
+Changing the Spark schema to `StringType` solves the parsing problem, but downstream systems may still expect an integer customer ID.
 
-```python
-StructField("customer_id", StringType(), True)
+## What Spark does
+
+Schema V3 preserves the value correctly:
+
+```text
+customer_id = C110
 ```
 
-## Flow
+Numeric historical IDs such as `101` can also be represented as strings.
+
+## Why this matters
+
+Ingestion compatibility is only one part of schema evolution. Existing tables, joins, APIs, and reports may need migration.
 
 ```mermaid
-flowchart TD
-    A[Confirm source format changed permanently] --> B[Assess downstream impact]
-    B --> C[Create schema V3]
-    C --> D[Test old and new customer IDs]
-    D --> E[Deploy new pipeline version]
-    E --> F[Store C110 correctly]
+flowchart LR
+    A[Schema V3 stores string ID] --> B[Raw ingestion works]
+    B --> C{Downstream accepts string?}
+    C -->|Yes| D[Migration complete]
+    C -->|No| E[Compatibility work required]
 ```
+
+## Possible solutions
+
+| Option | Purpose |
+|---|---|
+| Adopt string as the canonical ID type | Supports numeric and alphanumeric values |
+| Provide a temporary compatibility view or column | Gives old consumers migration time |
+| Migrate downstream schemas and joins | Removes long-term incompatibility |
+| Test historic and new IDs together | Confirms backward compatibility |
+
+## Recommended approach
+
+Use string as the canonical customer identifier, version the change, test old numeric IDs and new alphanumeric IDs, and migrate downstream consumers before retiring the numeric contract.
 
 ## Run
 
@@ -950,27 +976,11 @@ customer_id    = C110
 schema_version = v3
 ```
 
-## Important lesson
+## Interview connection
 
-Changing the datatype in Spark code is only one part of the solution.
+**Question:** Is changing `IntegerType` to `StringType` in Spark enough?
 
-A production change also requires:
-
-```text
-Source confirmation
-      ↓
-Impact analysis
-      ↓
-Schema versioning
-      ↓
-Testing
-      ↓
-Controlled deployment
-      ↓
-Monitoring
-```
-
-Downstream systems must also be checked. A table, API, or report that expects an integer may not accept `C110`.
+**Answer:** No. The source contract, existing data, downstream schemas, joins, APIs, reports, checkpoints, and deployment strategy must also be reviewed.
 
 ---
 

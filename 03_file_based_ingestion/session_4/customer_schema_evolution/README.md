@@ -1,14 +1,13 @@
 # Customer Schema Evolution with the PySpark Shell
 
-This version is designed for an interactive demonstration. The helper file only
-defines schemas, paths, scenario configuration, and reusable functions. It does
-not start or run a streaming query automatically.
+This package is designed for an interactive PySpark shell demonstration using one customer file stream. Nothing runs automatically. Each scenario can be prepared, started, observed, and stopped independently.
 
 ## Project structure
 
 ```text
 customer_schema_evolution_pyspark_shell/
 ├── customer_schema_evolution_shell_helpers.py
+├── customer_schema_evolution_notes.md
 ├── sample_files/
 │   ├── customers_01_baseline.csv
 │   ├── customers_02_added_phone_old_schema.csv
@@ -38,15 +37,25 @@ exec(
 )
 ```
 
-See the available scenarios:
+List the available scenarios:
 
 ```python
 list_scenarios()
 ```
 
-## Standard demonstration pattern
+## Raw-zone output format
 
-Use the same six commands for every scenario:
+Each successful micro-batch is written as a CSV file with a header:
+
+```text
+schema_evolution_runtime/raw_zone/customers/<scenario>/batches/
+└── batch_00000000000000000000/
+    └── customers_batch_00000000000000000000.csv
+```
+
+`coalesce(1)` is used only to make this small local output easy to open. Large production batches should normally retain parallel output files.
+
+## Standard shell flow
 
 ```python
 scenario = "baseline"
@@ -63,31 +72,30 @@ show_raw_output(scenario)
 stop_customer_stream(scenario)
 ```
 
-Starting the stream before `arrive_file()` makes the file-arrival behaviour
-visible. `process_available_data()` removes the need to wait for an uncertain
-number of trigger intervals during a live demonstration.
+For every non-baseline scenario, `explain_scenario()` now displays:
 
----
-
-## Exercise 1: Baseline schema
-
-```python
-scenario = "baseline"
-prepare_scenario(scenario)
-explain_scenario(scenario)
-show_input_file(scenario)
-q = start_customer_stream(scenario)
-arrive_file(scenario)
-process_available_data(scenario)
-show_raw_output(scenario)
-stop_customer_stream(scenario)
+```text
+Problem
+What Spark does
+Why it matters
+Possible solutions
+Recommended approach
 ```
 
-Expected result: all V1 columns are stored correctly.
+## Scenario summary
 
----
+| Scenario | Problem demonstrated | Recommended direction |
+|---|---|---|
+| `baseline` | File and schema match | Use as the reference result |
+| `added_column_old_schema` | V2 file arrives while query still uses V1 | Upgrade to nullable V2 and version the deployment |
+| `old_file_new_schema` | V1 file arrives after V2 deployment | Allow null temporarily, monitor, then enforce cutover |
+| `reordered_columns_unsafe` | Positional mapping swaps values silently | Reject unexpected order and validate headers |
+| `reordered_columns_safe` | Header validation stops the bad file | Keep the safeguard; correct or quarantine the file |
+| `renamed_columns` | New names break the contract | Map explicitly or release a new version |
+| `datatype_change_old_schema` | Alphanumeric ID becomes null under integer schema | Reject invalid key and move to string-based V3 |
+| `datatype_change_new_schema` | Raw ingestion works but consumers may expect integer | Make string canonical and migrate downstream systems |
 
-## Exercise 2: New source column with the old Spark schema
+## Run a successful scenario
 
 ```python
 scenario = "added_column_old_schema"
@@ -101,49 +109,7 @@ show_raw_output(scenario)
 stop_customer_stream(scenario)
 ```
 
-Expected observation: the pipeline still exposes schema V1 and does not retain
-`phone_number`. An explicit Spark schema does not evolve automatically just
-because a source file contains another column.
-
----
-
-## Exercise 3: Old file after upgrading to schema V2
-
-```python
-scenario = "old_file_new_schema"
-prepare_scenario(scenario)
-explain_scenario(scenario)
-show_input_file(scenario)
-q = start_customer_stream(scenario)
-arrive_file(scenario)
-process_available_data(scenario)
-show_raw_output(scenario)
-stop_customer_stream(scenario)
-```
-
-Expected observation: `phone_number` is null. This is a common backward-
-compatibility pattern for a newly added optional field.
-
----
-
-## Exercise 4A: Reordered columns with positional mapping
-
-```python
-scenario = "reordered_columns_unsafe"
-prepare_scenario(scenario)
-explain_scenario(scenario)
-show_input_file(scenario)
-q = start_customer_stream(scenario)
-arrive_file(scenario)
-process_available_data(scenario)
-show_raw_output(scenario)
-stop_customer_stream(scenario)
-```
-
-Expected observation: the job can succeed while `email` and `city` contain each
-other's values. This is silent data corruption.
-
-## Exercise 4B: Reordered columns with header validation
+## Run an expected-failure scenario
 
 ```python
 scenario = "reordered_columns_safe"
@@ -155,100 +121,28 @@ arrive_file(scenario)
 process_available_data(scenario)
 ```
 
-The last command is expected to report a header mismatch. After observing it:
+Inspect and stop the failed query:
 
 ```python
 show_query_status(scenario)
 stop_customer_stream(scenario)
 ```
 
----
-
-## Exercise 5: Renamed columns
+The same pattern applies to:
 
 ```python
 scenario = "renamed_columns"
-prepare_scenario(scenario)
-explain_scenario(scenario)
-show_input_file(scenario)
-q = start_customer_stream(scenario)
-arrive_file(scenario)
-process_available_data(scenario)
 ```
-
-The file is expected to fail header validation because `full_name` and
-`email_address` do not match the agreed V2 column names.
-
-```python
-show_query_status(scenario)
-stop_customer_stream(scenario)
-```
-
----
-
-## Exercise 6A: Datatype change using the old schema
-
-```python
-scenario = "datatype_change_old_schema"
-prepare_scenario(scenario)
-explain_scenario(scenario)
-show_input_file(scenario)
-q = start_customer_stream(scenario)
-arrive_file(scenario)
-process_available_data(scenario)
-show_raw_output(scenario)
-stop_customer_stream(scenario)
-```
-
-Expected observation: `C110` cannot be represented as an integer and can become
-null under permissive parsing. A successful pipeline run does not guarantee
-that a business key remains valid.
-
-## Exercise 6B: Controlled upgrade to schema V3
-
-```python
-scenario = "datatype_change_new_schema"
-prepare_scenario(scenario)
-explain_scenario(scenario)
-show_input_file(scenario)
-q = start_customer_stream(scenario)
-arrive_file(scenario)
-process_available_data(scenario)
-show_raw_output(scenario)
-stop_customer_stream(scenario)
-```
-
-Expected observation: `C110` is retained because schema V3 stores `customer_id`
-as a string.
-
----
 
 ## Useful shell commands
 
-Inspect the query without stopping it:
-
 ```python
 show_query_status(scenario)
-```
-
-Access the query directly:
-
-```python
 q = get_query(scenario)
 q.status
 q.lastProgress
 q.exception()
-```
-
-Stop all queries before leaving the shell:
-
-```python
 stop_all_customer_streams()
-```
-
-Exit:
-
-```python
 exit()
 ```
 
@@ -257,30 +151,17 @@ exit()
 ```text
 Baseline
   ↓
-Added optional column
+New column with old schema: problem and upgrade options
   ↓
-Old file with the new schema
+Old file with new schema: compatibility window
   ↓
-Reordered columns: unsafe and safe
+Reordered columns: silent corruption and safe rejection
   ↓
-Renamed columns
+Renamed columns: explicit mapping or versioning
   ↓
-Datatype change: old and upgraded schema
+Datatype change: failed old contract and controlled V3 migration
 ```
 
-The main production lesson is that schema evolution must be classified before
-it is accepted:
+The main production lesson is:
 
-```text
-Add nullable field at the end
-    → Usually easier to support
-
-Old file missing the new trailing field
-    → Can remain compatible using null
-
-Reorder or rename CSV columns
-    → Breaking and potentially dangerous
-
-Change a business-key datatype
-    → Breaking; requires controlled versioning and impact analysis
-```
+> A schema mismatch is not only an error to observe. It is a compatibility problem that needs an explicit response: accept temporarily, reject, map, version, or migrate.
