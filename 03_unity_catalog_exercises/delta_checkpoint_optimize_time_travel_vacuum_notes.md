@@ -1426,22 +1426,7 @@ CASCADE;
 
 ---
 
-# 16. Validation Status
-
-The code blocks in this guide were statically checked for:
-
-- Python syntax
-- Balanced SQL strings and parentheses
-- Expected sample row counts
-- `UPDATE`, `DELETE`, time-travel, and `RESTORE` states
-- Balanced Markdown fences
-- Balanced Mermaid blocks
-
-The commands were not executed in your Azure Databricks workspace. Exact file counts, checkpoint versions, table versions, permissions, and runtime-dependent behaviour must be verified in a dedicated development environment.
-
----
-
-# 17. Official References
+# 16. Official References
 
 - [Optimize data file layout](https://learn.microsoft.com/en-us/azure/databricks/delta/optimize)
 - [Best practices for Delta Lake](https://learn.microsoft.com/en-us/azure/databricks/delta/best-practices)
