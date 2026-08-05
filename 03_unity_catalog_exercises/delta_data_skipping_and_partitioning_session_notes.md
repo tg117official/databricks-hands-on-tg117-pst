@@ -545,6 +545,254 @@ For this session, the property change is shown to explain the configuration. It 
 
 ---
 
+# Common Questions: Delta Data Skipping and File Statistics
+
+## 1. Do we need to enable data skipping explicitly?
+
+No. Delta Lake automatically collects file-level statistics whenever new data files are written.
+
+These statistics include:
+
+* Minimum value
+* Maximum value
+* Null count
+* Number of records
+
+Databricks automatically uses these statistics during query execution to skip files that cannot contain the required records. ([Microsoft Learn][1])
+
+```text
+Write data to Delta table
+        ↓
+Delta collects file-level statistics
+        ↓
+Query contains a filter
+        ↓
+Databricks checks file statistics
+        ↓
+Irrelevant files are skipped
+```
+
+---
+
+## 2. Do we need to run `ANALYZE` after every write?
+
+No. You do not need to run `ANALYZE TABLE ... COMPUTE DELTA STATISTICS` after every:
+
+* `INSERT`
+* `UPDATE`
+* `DELETE`
+* `MERGE`
+* DataFrame append
+
+Statistics are automatically collected for the new data files created by these operations. ([Microsoft Learn][1])
+
+Run the following command when you change the configured statistics columns and need to calculate statistics for older files that already exist:
+
+```sql
+ANALYZE TABLE delta_partitioning_lab.sales_demo.sales_unpartitioned
+COMPUTE DELTA STATISTICS;
+```
+
+Changing `delta.dataSkippingStatsColumns` affects future writes but does not automatically recalculate statistics for existing files. `COMPUTE DELTA STATISTICS` performs that recalculation on supported runtimes. ([Microsoft Learn][1])
+
+---
+
+## 3. Are statistics limited to 32 columns?
+
+### Unity Catalog external tables
+
+By default, statistics are collected for the first 32 columns defined in the table schema.
+
+```text
+Column 1 to Column 32
+    → Statistics collected by default
+
+Column 33 onwards
+    → Statistics not collected by default
+```
+
+You can explicitly choose statistics columns:
+
+```sql
+ALTER TABLE delta_partitioning_lab.sales_demo.sales_unpartitioned
+SET TBLPROPERTIES
+(
+    'delta.dataSkippingStatsColumns' =
+    'order_id,customer_id,order_date,order_year,order_month,region'
+);
+```
+
+### Unity Catalog managed tables
+
+When predictive optimization is enabled, Databricks intelligently selects useful statistics columns, and the fixed 32-column limit does not apply. Predictive optimization can automatically run `ANALYZE` for managed tables. ([Microsoft Learn][1])
+
+---
+
+## 4. Where are file-level statistics stored?
+
+Delta file-level statistics are stored in the Delta transaction log as part of the file-addition metadata.
+
+They can be inspected from the JSON commit files:
+
+```python
+display(
+    spark.read
+    .json(
+        "abfss://data@demodb117.dfs.core.windows.net/"
+        "delta_partitioning_session/sales_unpartitioned/"
+        "_delta_log/*.json"
+    )
+    .where("add.path IS NOT NULL")
+    .select(
+        "add.path",
+        "add.partitionValues",
+        "add.stats"
+    )
+)
+```
+
+The `stats` value can contain information such as:
+
+```json
+{
+  "numRecords": 1000,
+  "minValues": {
+    "customer_id": 1001,
+    "region": "EAST"
+  },
+  "maxValues": {
+    "customer_id": 1999,
+    "region": "WEST"
+  },
+  "nullCount": {
+    "customer_id": 0,
+    "region": 5
+  }
+}
+```
+
+These files should only be inspected. They must never be manually modified.
+
+---
+
+## 5. What happens when old JSON transaction-log files are removed?
+
+Data skipping does not require every historical JSON commit to remain permanently available.
+
+Delta creates checkpoint files that summarize the state of the table, including the active data files and their metadata. To reconstruct the current snapshot, Delta reads:
+
+```text
+Latest checkpoint
++
+JSON commits created after the checkpoint
+=
+Current table snapshot
+```
+
+Therefore, when older JSON commits are removed according to log retention, the statistics required for the current active files remain available through the checkpoint and newer commits.
+
+Removing older logs can limit access to old table versions, but it does not normally remove the statistics required for the current version. ([Microsoft Learn][2])
+
+---
+
+## 6. What statistics are maintained for string columns?
+
+For a string column, Delta can maintain:
+
+* Minimum string value
+* Maximum string value
+* Null count
+* Number of records in the file
+
+Example values:
+
+```text
+EAST
+NORTH
+SOUTH
+WEST
+```
+
+Possible file statistics:
+
+```text
+minValues.region = EAST
+maxValues.region = WEST
+nullCount.region = 0
+```
+
+String minimum and maximum values are determined using string comparison order.
+
+Long string values can be truncated during statistics collection. Columns containing long descriptions, comments, or large text values are therefore often less useful for data skipping. ([Microsoft Learn][1])
+
+---
+
+## 7. Are string statistics useful for data skipping?
+
+Yes, when string values are grouped into relatively narrow and non-overlapping file ranges.
+
+Example:
+
+```text
+File 1:
+Minimum region = EAST
+Maximum region = NORTH
+
+File 2:
+Minimum region = SOUTH
+Maximum region = WEST
+```
+
+Query:
+
+```sql
+SELECT *
+FROM sales
+WHERE region = 'WEST';
+```
+
+Databricks can reason as follows:
+
+```text
+File 1
+EAST to NORTH
+    → WEST cannot exist
+    → Skip file
+
+File 2
+SOUTH to WEST
+    → WEST may exist
+    → Read file
+```
+
+String statistics become less useful when every file contains a wide overlapping range:
+
+```text
+File 1 → EAST to WEST
+File 2 → EAST to WEST
+File 3 → EAST to WEST
+```
+
+In this case, Databricks cannot safely eliminate any file for:
+
+```sql
+WHERE region = 'WEST'
+```
+
+```text
+Narrow, non-overlapping ranges
+    → Better data skipping
+
+Wide, overlapping ranges
+    → Limited data skipping
+```
+
+Short codes, categories, IDs, and names can benefit when their values are organized effectively across files. Long free-text columns are usually weaker candidates. ([Microsoft Learn][1])
+
+[1]: https://learn.microsoft.com/en-us/azure/databricks/tables/data-skipping "Data skipping - Azure Databricks | Microsoft Learn"
+[2]: https://learn.microsoft.com/en-us/azure/databricks/tables/history "Work with table history - Azure Databricks | Microsoft Learn"
+
+
 # 11. What Is Partitioning?
 
 Partitioning groups rows according to the values of selected columns.
