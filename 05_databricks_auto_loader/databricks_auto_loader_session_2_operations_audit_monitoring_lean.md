@@ -1,6 +1,6 @@
-# Auto Loader Production Operations, Audit and Monitoring
+# Session 2 — Auto Loader Operations, Audit and Monitoring
 
-This session builds and operates a self-contained multi-entity Auto Loader pipeline for `orders`, `customers`, and `products`. All required setup and execution steps are included:
+This session operates a self-contained Auto Loader pipeline for `orders`, `customers`, and `products`. It focuses on controlling file bursts, recording useful audit evidence, monitoring micro-batches, and recovering one failed entity without resetting healthy streams.
 
 - Session-specific ADLS folders and checkpoints
 - Explicit JSON schemas
@@ -13,22 +13,18 @@ This session builds and operates a self-contained multi-entity Auto Loader pipel
 
 ## Session index
 
-1. [Create an isolated Session 2 environment](#1-create-an-isolated-session-2-environment)
-2. [Define schemas, configurations, and file helpers](#2-define-schemas-configurations-and-file-helpers)
-3. [Create the operational audit tables](#3-create-the-operational-audit-tables)
-4. [Complete production-style ingestion script](#4-complete-production-style-ingestion-script)
-5. [Baseline: create and process the first delivery](#5-baseline-create-and-process-the-first-delivery)
-6. [Scenario 1: burst arrival and rate control](#6-scenario-1-burst-arrival-and-rate-control)
-7. [Scenario 2: uneven entity workloads](#7-scenario-2-uneven-entity-workloads)
-8. [Scenario 3: one entity fails](#8-scenario-3-one-entity-fails)
-9. [Scenario 4: targeted recovery](#9-scenario-4-targeted-recovery)
-10. [Monitor runs, batches, and file state](#10-monitor-runs-batches-and-file-state)
-11. [Scenario 5: investigate a reported file](#11-scenario-5-investigate-a-reported-file)
-12. [Create the dedicated job notebook](#12-create-the-dedicated-job-notebook)
-13. [Create the Serverless Job](#13-create-the-serverless-job)
-14. [Scenario 6: a second run is requested](#14-scenario-6-a-second-run-is-requested)
-15. [Final job-ready execution](#15-final-job-ready-execution)
-16. [Recovery checklist](#16-recovery-checklist)
+1. [Create an isolated environment](#1-create-an-isolated-session-2-environment)
+2. [Define schemas, entity configurations, and file helpers](#2-define-schemas-configurations-and-file-helpers)
+3. [Create run-level and micro-batch audit tables](#3-create-the-operational-audit-tables)
+4. [Build the complete ingestion and audit script](#4-complete-ingestion-and-audit-script)
+5. [Process and validate a baseline delivery](#5-baseline-create-and-process-the-first-delivery)
+6. [Control a burst with maxFilesPerTrigger](#6-scenario-1-burst-arrival-and-rate-control)
+7. [Compare uneven entity workloads](#7-scenario-2-uneven-entity-workloads)
+8. [Capture a single-entity failure](#8-scenario-3-one-entity-fails)
+9. [Recover only the failed entity](#9-scenario-4-targeted-recovery)
+10. [Monitor runs, micro-batches, and file state](#10-monitor-runs-batches-and-file-state)
+11. [Investigate one reported source file](#11-scenario-5-investigate-a-reported-file)
+12. [Use the recovery checklist](#12-recovery-checklist)
 
 ---
 
@@ -299,13 +295,43 @@ auto_loader_demo.sales_data.auto_loader_batch_audit_operations (
 USING DELTA;
 ```
 
-The run table stores the outcome of each entity. The batch table preserves Structured Streaming progress for operational monitoring.
+The run table answers **what happened to each entity during one pipeline execution**.
+
+| Run-audit column | One-line meaning |
+| --- | --- |
+| `pipeline_run_id` | Identifier shared by the entities started by one call to `run_entities()`. |
+| `entity_name` | Entity processed, such as `orders`, `customers`, or `products`. |
+| `query_name` | Name assigned to the Structured Streaming query for troubleshooting. |
+| `started_at` / `ended_at` | UTC timestamps marking the entity-run window. |
+| `status` | Technical result: `SUCCESS` or `FAILED`. |
+| `run_outcome` | Operational result: `PROCESSED`, `NO_DATA`, or `FAILED`. |
+| `files_written` | Distinct source files represented in rows written during the run window. |
+| `rows_written` | Bronze rows written during the run window. |
+| `micro_batches` | Progress events retained after the query finishes; useful as a short-run batch count. |
+| `duration_seconds` | Total wall-clock time used by that entity run. |
+| `error_message` | Truncated exception text when the entity fails. |
+
+The batch table answers **how each micro-batch behaved**.
+
+| Batch-audit column | One-line meaning |
+| --- | --- |
+| `pipeline_run_id`, `entity_name`, `query_name` | Connect the batch to its pipeline, entity, and streaming query. |
+| `progress_timestamp` | Time when Spark reported the progress event. |
+| `batch_id` | Checkpoint-scoped micro-batch number; it normally continues across restarts. |
+| `input_rows` | Rows accepted by that micro-batch. |
+| `input_rows_per_second` | Rate at which input became available to the query. |
+| `processed_rows_per_second` | Rate at which the micro-batch processed rows. |
+| `files_outstanding` / `bytes_outstanding` | Backlog still waiting after the reported progress point. |
+| `latest_offset_ms` | Time spent checking the source for the latest available work. |
+| `add_batch_ms` | Time spent executing the micro-batch, including reading, transformation, and sink work. |
+
+These tables stay separate because a final status alone hides slow batches and backlog, while batch metrics alone do not give a clear entity-level outcome.
 
 ---
 
-## 4. Complete production-style ingestion script
+## 4. Complete ingestion and audit script
 
-Run this complete script before breaking it down through the scenarios.
+Run this complete script once. The scenarios that follow reuse the same functions.
 
 ```python
 import uuid
@@ -709,6 +735,19 @@ Write batch and entity audits
 Fail the job when an entity failed
 ```
 
+### Why the core operations matter
+
+| Operation | Purpose and risk when missing |
+| --- | --- |
+| Explicit schema | Keeps expected columns and datatypes stable. Without it, inference can vary between deliveries. |
+| Unique checkpoint per entity | Stores that query's file and commit history. Sharing a checkpoint between independent queries can mix state or cause concurrent-access failures. |
+| `maxFilesPerTrigger` | Caps files planned for one micro-batch. Without a limit, a large arrival can create an oversized batch. |
+| `AvailableNow` | Drains data available when the query starts and then stops. It gives a scheduled Serverless task a clear finish point. |
+| `awaitTermination()` | Waits until the finite query completes. Without it, audit code can run before ingestion finishes. |
+| Source-file metadata | Connects Bronze rows to the file that produced them. Without it, file investigations become guesswork. |
+| Batch progress capture | Preserves throughput, backlog, and duration evidence. Without it, a successful run can still hide poor performance. |
+| Final exception propagation | Makes the outer task fail after audit rows are saved. Without it, a failed entity can appear successful. |
+
 ### Operational considerations
 
 - `cloudFiles.maxFilesPerTrigger` belongs on `readStream`, not `writeStream`.
@@ -888,7 +927,7 @@ Existing audit rows are historical and are not recalculated after the extraction
 ### Operational considerations
 
 - The file limit is hard, but files can contain very different numbers of rows and bytes.
-- `cloudFiles.maxBytesPerTrigger` is a soft limit and can be discussed as an alternative for uneven file sizes.
+- `cloudFiles.maxBytesPerTrigger` is a soft-limit alternative when file sizes vary significantly.
 - A very small limit can lengthen the run and contribute to a growing backlog.
 
 ---
@@ -1180,6 +1219,11 @@ ORDER BY progress_timestamp DESC, entity_name, batch_id;
 | Large `latest_offset_ms` | File discovery may be slow |
 | Large `add_batch_ms` | Transformation or sink processing may be slow |
 
+- **`latest_offset_ms`:** time Spark spent finding the newest source position or available files. Repeatedly high values point first toward source discovery or listing.
+- **`add_batch_ms`:** time Spark spent carrying out one micro-batch. Repeatedly high values point first toward reading, transformations, shuffle work, or the Delta write.
+
+One high value is not automatically an incident. Compare several batches and check whether backlog is also growing.
+
 ### 10.3 Orders file state
 
 ```sql
@@ -1231,9 +1275,23 @@ FROM cloud_files_state(
 ORDER BY create_time DESC;
 ```
 
-Some file-state timestamps depend on the Databricks Runtime and Auto Loader configuration. If a timestamp column is unavailable, begin with `SELECT *` and inspect the fields provided by the current environment.
+`cloud_files_state()` reads Auto Loader history from the supplied checkpoint; it does not inspect the Bronze Delta location. Another job reading the same landing folder with a different checkpoint has its own timestamps and ingestion state.
 
-Find orders files that are not committed:
+| File-state column | One-line meaning |
+| --- | --- |
+| `path` | Full source-file path recorded by this checkpoint. |
+| `size` | Source-file size in bytes. |
+| `create_time` | Time reported by cloud storage for file creation. |
+| `discovery_time` | Time this checkpointed stream discovered the file. |
+| `processed_time` | Most recent time this stream attempted to process the file. |
+| `commit_time` | Time this stream committed completion for the file. |
+| `ingestion_state` | Current state, such as `PROCESSING`, `INGESTED`, or a skipped state. |
+
+A file is fully complete when `ingestion_state = 'INGESTED'` and `commit_time IS NOT NULL`. These values belong to the streaming history represented by this checkpoint, not every job that might read the same source.
+
+Some timestamp columns depend on the Databricks Runtime and Auto Loader configuration. If one is unavailable, begin with `SELECT *` and inspect the fields provided by the current environment.
+
+Find orders files whose ingestion has not fully completed:
 
 ```sql
 SELECT
@@ -1243,7 +1301,8 @@ SELECT
 FROM cloud_files_state(
     'abfss://data@demodb117.dfs.core.windows.net/autoloader/production_session_2/checkpoints/orders/'
 )
-WHERE ingestion_state != 'COMMITTED';
+WHERE ingestion_state != 'INGESTED'
+   OR commit_time IS NULL;
 ```
 
 ---
@@ -1332,836 +1391,41 @@ display(
 | `COMMITTED` and present in Bronze | File ingestion completed |
 | Bronze row has rescued or corrupt content | File committed, but record quality needs investigation |
 
-### Blind point to discuss
+### Key distinction
 
 File arrival, checkpoint commit, Bronze ingestion, and record quality are separate operational questions.
 
 ---
 
-## 12. Create the dedicated job notebook
 
-The notebook used for explanations and scenarios contains optional reset cells, test-data generation, inspection queries, and intentional failures. A scheduled job should not execute those cells.
-
-Create a separate notebook containing only the stable ingestion code.
-
-### 12.1 Create the notebook
-
-1. Open **Workspace**.
-2. Select the folder where the production notebook should be stored.
-3. Select **Create** → **Notebook**.
-4. Name the notebook `auto_loader_multi_table_job`.
-5. Select **Python** as the default language.
-6. Paste the complete code below into one Python cell.
-7. Save the notebook.
-
-Using one complete cell prevents the job from depending on the order or numbering of cells in the scenario notebook.
-
-### 12.2 Complete code for `auto_loader_multi_table_job`
-
-```python
-import uuid
-from datetime import datetime, timezone
-
-from pyspark.sql.functions import col, current_timestamp, lit
-from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    TimestampType,
-    LongType,
-    DoubleType
-)
-
-
-# Job parameters make the same notebook usable for all entities or a selected
-# recovery scope. Databricks Job task parameters can override these defaults.
-dbutils.widgets.text(
-    "selected_entities",
-    "orders,customers,products"
-)
-dbutils.widgets.text("max_files_per_trigger", "2")
-
-selected_entities_text = dbutils.widgets.get(
-    "selected_entities"
-).strip()
-selected_entities = [
-    value.strip()
-    for value in selected_entities_text.split(",")
-    if value.strip()
-]
-max_files_per_trigger = int(
-    dbutils.widgets.get("max_files_per_trigger")
-)
-
-
-# Explicit schemas keep the expected business columns and datatypes stable.
-orders_schema = StructType([
-    StructField("order_id", LongType(), True),
-    StructField("customer_id", LongType(), True),
-    StructField("order_timestamp", TimestampType(), True),
-    StructField("amount", DoubleType(), True),
-    StructField("status", StringType(), True),
-    StructField("_corrupt_record", StringType(), True)
-])
-
-customers_schema = StructType([
-    StructField("customer_id", LongType(), True),
-    StructField("customer_name", StringType(), True),
-    StructField("city", StringType(), True),
-    StructField("email", StringType(), True),
-    StructField("_corrupt_record", StringType(), True)
-])
-
-products_schema = StructType([
-    StructField("product_id", LongType(), True),
-    StructField("product_name", StringType(), True),
-    StructField("category", StringType(), True),
-    StructField("price", DoubleType(), True),
-    StructField("_corrupt_record", StringType(), True)
-])
-
-
-# Each entity owns a separate source, checkpoint, and Bronze target.
-entity_configs = {
-    "orders": {
-        "schema": orders_schema,
-        "source_path": (
-            "abfss://data@demodb117.dfs.core.windows.net/"
-            "autoloader/production_session_2/landing/orders/"
-        ),
-        "checkpoint_path": (
-            "abfss://data@demodb117.dfs.core.windows.net/"
-            "autoloader/production_session_2/checkpoints/orders/"
-        ),
-        "target_table": (
-            "auto_loader_demo.sales_data.orders_bronze_operations"
-        )
-    },
-    "customers": {
-        "schema": customers_schema,
-        "source_path": (
-            "abfss://data@demodb117.dfs.core.windows.net/"
-            "autoloader/production_session_2/landing/customers/"
-        ),
-        "checkpoint_path": (
-            "abfss://data@demodb117.dfs.core.windows.net/"
-            "autoloader/production_session_2/checkpoints/customers/"
-        ),
-        "target_table": (
-            "auto_loader_demo.sales_data.customers_bronze_operations"
-        )
-    },
-    "products": {
-        "schema": products_schema,
-        "source_path": (
-            "abfss://data@demodb117.dfs.core.windows.net/"
-            "autoloader/production_session_2/landing/products/"
-        ),
-        "checkpoint_path": (
-            "abfss://data@demodb117.dfs.core.windows.net/"
-            "autoloader/production_session_2/checkpoints/products/"
-        ),
-        "target_table": (
-            "auto_loader_demo.sales_data.products_bronze_operations"
-        )
-    }
-}
-
-
-RUN_AUDIT_TABLE = (
-    "auto_loader_demo.sales_data."
-    "auto_loader_run_audit_operations"
-)
-BATCH_AUDIT_TABLE = (
-    "auto_loader_demo.sales_data."
-    "auto_loader_batch_audit_operations"
-)
-
-
-# Create the audit objects if this is the first job execution.
-spark.sql(
-    "CREATE SCHEMA IF NOT EXISTS auto_loader_demo.sales_data"
-)
-
-spark.sql(
-    """
-    CREATE TABLE IF NOT EXISTS
-    auto_loader_demo.sales_data.auto_loader_run_audit_operations (
-        pipeline_run_id STRING,
-        entity_name STRING,
-        query_name STRING,
-        started_at TIMESTAMP,
-        ended_at TIMESTAMP,
-        status STRING,
-        run_outcome STRING,
-        files_written BIGINT,
-        rows_written BIGINT,
-        micro_batches BIGINT,
-        duration_seconds DOUBLE,
-        error_message STRING
-    )
-    USING DELTA
-    """
-)
-
-spark.sql(
-    """
-    CREATE TABLE IF NOT EXISTS
-    auto_loader_demo.sales_data.auto_loader_batch_audit_operations (
-        pipeline_run_id STRING,
-        entity_name STRING,
-        query_name STRING,
-        progress_timestamp STRING,
-        batch_id BIGINT,
-        input_rows BIGINT,
-        input_rows_per_second DOUBLE,
-        processed_rows_per_second DOUBLE,
-        files_outstanding BIGINT,
-        bytes_outstanding BIGINT,
-        latest_offset_ms BIGINT,
-        add_batch_ms BIGINT
-    )
-    USING DELTA
-    """
-)
-
-
-run_audit_schema = StructType([
-    StructField("pipeline_run_id", StringType(), False),
-    StructField("entity_name", StringType(), False),
-    StructField("query_name", StringType(), False),
-    StructField("started_at", TimestampType(), False),
-    StructField("ended_at", TimestampType(), False),
-    StructField("status", StringType(), False),
-    StructField("run_outcome", StringType(), False),
-    StructField("files_written", LongType(), False),
-    StructField("rows_written", LongType(), False),
-    StructField("micro_batches", LongType(), False),
-    StructField("duration_seconds", DoubleType(), False),
-    StructField("error_message", StringType(), True)
-])
-
-batch_audit_schema = StructType([
-    StructField("pipeline_run_id", StringType(), False),
-    StructField("entity_name", StringType(), False),
-    StructField("query_name", StringType(), False),
-    StructField("progress_timestamp", StringType(), True),
-    StructField("batch_id", LongType(), False),
-    StructField("input_rows", LongType(), False),
-    StructField("input_rows_per_second", DoubleType(), False),
-    StructField("processed_rows_per_second", DoubleType(), False),
-    StructField("files_outstanding", LongType(), True),
-    StructField("bytes_outstanding", LongType(), True),
-    StructField("latest_offset_ms", LongType(), True),
-    StructField("add_batch_ms", LongType(), True)
-])
-
-
-# Purpose: Check job parameters and entity settings before any stream starts.
-# This prevents a spelling or configuration error from starting partial work.
-def validate_job_configuration(
-    configs,
-    entities,
-    file_limit
-):
-    required_keys = {
-        "schema",
-        "source_path",
-        "checkpoint_path",
-        "target_table"
-    }
-
-    unknown_entities = set(entities) - set(configs)
-    if unknown_entities:
-        raise ValueError(
-            "Unknown entities: "
-            + ", ".join(sorted(unknown_entities))
-        )
-
-    if not entities:
-        raise ValueError("At least one entity must be selected.")
-
-    if file_limit <= 0:
-        raise ValueError(
-            "max_files_per_trigger must be greater than zero."
-        )
-
-    for entity_name, config in configs.items():
-        missing_keys = required_keys - set(config)
-        if missing_keys:
-            raise ValueError(
-                f"{entity_name} is missing {sorted(missing_keys)}"
-            )
-
-    for key in [
-        "source_path",
-        "checkpoint_path",
-        "target_table"
-    ]:
-        values = [config[key] for config in configs.values()]
-        if len(values) != len(set(values)):
-            raise ValueError(
-                f"Every entity requires a unique {key}."
-            )
-
-
-# Purpose: Convert a reported metric to an integer while keeping a missing
-# metric as None.
-def optional_int(value):
-    return None if value is None else int(value)
-
-
-# Purpose: Convert a metric to an integer and use the supplied default when
-# Databricks reports the metric as None.
-def safe_int(value, default=0):
-    return default if value is None else int(value)
-
-
-# Purpose: Convert a reported rate to a decimal number and use 0.0 when the
-# metric is unavailable.
-def safe_float(value):
-    return 0.0 if value is None else float(value)
-
-
-# Purpose: Build the Auto Loader DataFrame for one entity with its schema,
-# rate limit, rescued-data handling, and standard file metadata.
-def build_entity_stream(
-    entity_name,
-    config,
-    file_limit
-):
-    source_df = (
-        spark.readStream
-        .format("cloudFiles")
-        .option("cloudFiles.format", "json")
-        .option("cloudFiles.maxFilesPerTrigger", file_limit)
-        .option("cloudFiles.schemaEvolutionMode", "rescue")
-        .option("rescuedDataColumn", "_rescued_data")
-        .option("readerCaseSensitive", "true")
-        .option("mode", "PERMISSIVE")
-        .option(
-            "columnNameOfCorruptRecord",
-            "_corrupt_record"
-        )
-        .schema(config["schema"])
-        .load(config["source_path"])
-    )
-
-    return (
-        source_df
-        .withColumn("entity_name", lit(entity_name))
-        .withColumn(
-            "source_file_path",
-            col("_metadata.file_path")
-        )
-        .withColumn(
-            "source_file_name",
-            col("_metadata.file_name")
-        )
-        .withColumn(
-            "source_file_modified_at",
-            col("_metadata.file_modification_time")
-        )
-        .withColumn("ingested_at", current_timestamp())
-    )
-
-
-# Purpose: Convert stream progress events into rows that can be stored in the
-# batch-audit table for throughput and backlog monitoring.
-def extract_batch_rows(
-    pipeline_run_id,
-    entity_name,
-    query_name,
-    progress_events
-):
-    batch_rows = []
-
-    for progress in progress_events:
-        sources = progress.get("sources", [])
-        source = sources[0] if sources else {}
-        metrics = source.get("metrics", {}) or {}
-        durations = progress.get("durationMs", {}) or {}
-
-        # Row and rate metrics can be reported at source level. Fall back to
-        # the top-level progress values when the source value is unavailable.
-        input_rows_value = source.get("numInputRows")
-        if input_rows_value is None:
-            input_rows_value = progress.get("numInputRows")
-
-        input_rate_value = source.get("inputRowsPerSecond")
-        if input_rate_value is None:
-            input_rate_value = progress.get("inputRowsPerSecond")
-
-        processed_rate_value = source.get(
-            "processedRowsPerSecond"
-        )
-        if processed_rate_value is None:
-            processed_rate_value = progress.get(
-                "processedRowsPerSecond"
-            )
-
-        batch_rows.append({
-            "pipeline_run_id": pipeline_run_id,
-            "entity_name": entity_name,
-            "query_name": query_name,
-            "progress_timestamp": progress.get("timestamp"),
-            "batch_id": safe_int(
-                progress.get("batchId"),
-                -1
-            ),
-            "input_rows": safe_int(
-                input_rows_value,
-                0
-            ),
-            "input_rows_per_second": safe_float(
-                input_rate_value
-            ),
-            "processed_rows_per_second": safe_float(
-                processed_rate_value
-            ),
-            "files_outstanding": optional_int(
-                metrics.get("numFilesOutstanding")
-            ),
-            "bytes_outstanding": optional_int(
-                metrics.get("numBytesOutstanding")
-            ),
-            "latest_offset_ms": optional_int(
-                durations.get("latestOffset")
-            ),
-            "add_batch_ms": optional_int(
-                durations.get("addBatch")
-            )
-        })
-
-    return batch_rows
-
-
-# Purpose: Count rows and source files written within the current entity-run
-# time window so the run audit contains simple totals.
-def count_written_rows_and_files(
-    target_table,
-    started_at,
-    ended_at
-):
-    rows_from_run = (
-        spark.table(target_table)
-        .where(
-            (col("ingested_at") >= lit(started_at))
-            & (col("ingested_at") <= lit(ended_at))
-        )
-    )
-
-    rows_written = rows_from_run.count()
-    files_written = (
-        rows_from_run
-        .select("source_file_path")
-        .distinct()
-        .count()
-    )
-
-    return rows_written, files_written
-
-
-# Purpose: Store one final success, no-data, or failure result for an entity.
-def save_run_audit(record):
-    (
-        spark.createDataFrame([record], run_audit_schema)
-        .write
-        .mode("append")
-        .saveAsTable(RUN_AUDIT_TABLE)
-    )
-
-
-# Purpose: Store available micro-batch progress. A no-data run may have no
-# progress rows, so the function writes only when records exist.
-def save_batch_audit(records):
-    if records:
-        (
-            spark.createDataFrame(records, batch_audit_schema)
-            .write
-            .mode("append")
-            .saveAsTable(BATCH_AUDIT_TABLE)
-        )
-
-
-# Purpose: Run one entity, wait for AvailableNow to finish, capture its
-# progress, and write its audit records even when the entity fails.
-def run_entity(
-    pipeline_run_id,
-    entity_name,
-    config,
-    file_limit
-):
-    started_at = datetime.now(timezone.utc)
-    query_name = (
-        f"autoloader_{entity_name}_"
-        f"{pipeline_run_id.replace('-', '_')}"
-    )
-    query = None
-    progress_events = []
-    status = "SUCCESS"
-    error_message = None
-
-    try:
-        entity_df = build_entity_stream(
-            entity_name,
-            config,
-            file_limit
-        )
-
-        query = (
-            entity_df.writeStream
-            .format("delta")
-            .outputMode("append")
-            .queryName(query_name)
-            .option(
-                "checkpointLocation",
-                config["checkpoint_path"]
-            )
-            .trigger(availableNow=True)
-            .toTable(config["target_table"])
-        )
-
-        query.awaitTermination()
-        progress_events = list(query.recentProgress)
-
-    except Exception as error:
-        status = "FAILED"
-        error_message = str(error)[:4000]
-
-        if query is not None:
-            progress_events = list(query.recentProgress)
-
-    ended_at = datetime.now(timezone.utc)
-
-    try:
-        rows_written, files_written = count_written_rows_and_files(
-            config["target_table"],
-            started_at,
-            ended_at
-        )
-    except Exception:
-        rows_written = 0
-        files_written = 0
-
-    save_batch_audit(
-        extract_batch_rows(
-            pipeline_run_id,
-            entity_name,
-            query_name,
-            progress_events
-        )
-    )
-
-    run_outcome = (
-        "FAILED"
-        if status == "FAILED"
-        else "NO_DATA"
-        if rows_written == 0
-        else "PROCESSED"
-    )
-
-    run_record = {
-        "pipeline_run_id": pipeline_run_id,
-        "entity_name": entity_name,
-        "query_name": query_name,
-        "started_at": started_at,
-        "ended_at": ended_at,
-        "status": status,
-        "run_outcome": run_outcome,
-        "files_written": int(files_written),
-        "rows_written": int(rows_written),
-        "micro_batches": int(len(progress_events)),
-        "duration_seconds": float(
-            (ended_at - started_at).total_seconds()
-        ),
-        "error_message": error_message
-    }
-    save_run_audit(run_record)
-
-    print(
-        f"{entity_name}: status={status}, "
-        f"outcome={run_outcome}, "
-        f"files={files_written}, "
-        f"rows={rows_written}, "
-        f"batches={len(progress_events)}"
-    )
-
-    return run_record
-
-
-# Purpose: Give all selected entities one pipeline run ID, execute them, and
-# fail the task after auditing if any entity failed.
-def run_entities(
-    configs,
-    entities,
-    file_limit
-):
-    pipeline_run_id = str(uuid.uuid4())
-    results = []
-
-    for entity_name in entities:
-        results.append(
-            run_entity(
-                pipeline_run_id,
-                entity_name,
-                configs[entity_name],
-                file_limit
-            )
-        )
-
-    failed_entities = [
-        result["entity_name"]
-        for result in results
-        if result["status"] == "FAILED"
-    ]
-
-    print(f"Pipeline run ID: {pipeline_run_id}")
-
-    if failed_entities:
-        raise RuntimeError(
-            "Failed entities: " + ", ".join(failed_entities)
-        )
-
-    return pipeline_run_id
-
-
-validate_job_configuration(
-    entity_configs,
-    selected_entities,
-    max_files_per_trigger
-)
-
-pipeline_run_id = run_entities(
-    entity_configs,
-    selected_entities,
-    max_files_per_trigger
-)
-
-print(f"Completed pipeline run: {pipeline_run_id}")
-```
-
-### 12.3 What belongs in the job notebook
-
-| Included | Excluded |
-| --- | --- |
-| Schemas and entity configurations | Optional cleanup commands |
-| Job parameters | Sample-file generation |
-| Auto Loader and audit functions | Intentional invalid configuration |
-| Audit-table creation | Display-only validation cells |
-| Final execution call | Scenario-specific variables |
-
-### 12.4 Test the dedicated notebook
-
-Before scheduling it:
-
-1. Create at least one new JSON delivery from the scenario notebook.
-2. Run `auto_loader_multi_table_job` manually.
-3. Confirm that the task processes the new file.
-4. Check the run-audit and batch-audit tables.
-5. Confirm that a no-data entity is recorded as `SUCCESS` with `NO_DATA`.
-
-### Operational considerations
-
-- The scenario notebook creates files and explains behaviour; the job notebook only performs ingestion and auditing.
-- Editing or reordering cells in the scenario notebook cannot change the scheduled job.
-- Job parameters can run all entities normally or a selected entity during targeted recovery.
-- The job identity needs the same storage and Unity Catalog permissions used during manual validation.
 
 ---
 
-## 13. Create the Serverless Job
+## 12. Recovery checklist
 
-### 13.1 Create the job
-
-1. Open **Workflows**.
-2. Select **Jobs & Pipelines**.
-3. Select **Create job**.
-4. Name it `auto-loader-multi-table-operations`.
-5. Add `auto_loader_multi_table_job` as the notebook task.
-6. Select **Serverless** compute.
-
-### 13.2 Configure starting controls
-
-| Setting | Initial value | Purpose |
+| Situation | First evidence to inspect | Safe next action |
 | --- | --- | --- |
-| Timeout | 30 minutes | Prevent an indefinitely running task |
-| Retries | 2 | Retry transient failures |
-| Retry interval | 5 minutes | Avoid immediate repeated pressure |
-| Maximum concurrent runs | 1 | Prevent overlapping executions |
-| Notification | Failure notification | Inform the operating team |
+| One entity failed | Run audit and error message | Correct the cause and rerun only that entity. |
+| Entity returned `NO_DATA` | Landing folder and delivery expectation | Decide whether no delivery is normal or an SLA issue. |
+| Backlog grows | Batch audit and file state | Compare arrival rate, batch duration, and the file limit. |
+| Reported file is missing | Landing, checkpoint state, Bronze metadata, audit | Identify the stage at which evidence disappears. |
+| A retry is required | Failed batch and original checkpoint | Preserve the checkpoint and restart after fixing the cause. |
+| Historical replay is required | Replay scope and retention | Use an isolated checkpoint and target instead of deleting production state. |
 
-The job trigger and the streaming trigger have different roles:
+Deleting a checkpoint removes the stream's processing memory. It is a reset, not the first recovery step.
 
-| Control | Responsibility |
-| --- | --- |
-| Job schedule or file-arrival trigger | Starts the notebook |
-| `.trigger(availableNow=True)` | Processes pending files and stops |
+## Session summary
 
-Add these task parameters:
-
-| Parameter | Value |
-| --- | --- |
-| `selected_entities` | `orders,customers,products` |
-| `max_files_per_trigger` | `2` |
-
-The dedicated notebook already contains the final execution call. The Job task only supplies parameters and starts the notebook.
-
-### Operational considerations
-
-- Catching every exception without raising a final error can make a failed pipeline appear successful.
-- Retries help with transient failures; they do not repair incorrect paths, permissions, schemas, or code.
-- Production jobs should use a production service identity rather than an individual user's identity.
-- The team receiving failure notifications must own the response process.
-
----
-
-## 14. Scenario 6: a second run is requested
-
-### Problem
-
-Another run is requested while the current job run is active.
-
-### Concurrency test
-
-1. Start the job manually.
-2. Request another run while the first is active.
-3. Inspect the run history.
-4. Observe whether the second request is queued or skipped under the queue and concurrency settings.
-5. Confirm that only one job run actively owns the entity checkpoints.
-
-### Operational considerations
-
-- Job concurrency prevents overlapping executions.
-- With queuing enabled, an excess run can wait; without queuing, it can be skipped.
-- Checkpoints preserve stream state, while concurrency settings control job execution.
-- These mechanisms complement each other but are not interchangeable.
-
----
-
-## 15. Final job-ready execution
-
-### Cell 1 — Generate a mixed delivery
-
-```python
-write_json_records(
-    entity_configs["orders"]["source_path"]
-    + f"orders_final_{delivery_batch_tag}_001.json",
-    [
-        {
-            "order_id": 3401,
-            "customer_id": 1501,
-            "order_timestamp": "2026-08-17T14:01:00Z",
-            "amount": 3499.0,
-            "status": "CONFIRMED"
-        },
-        {
-            "order_id": 3402,
-            "customer_id": 1502,
-            "order_timestamp": "2026-08-17T14:02:00Z",
-            "amount": 1799.0,
-            "status": "SHIPPED"
-        }
-    ]
-)
-
-write_json_records(
-    entity_configs["products"]["source_path"]
-    + f"products_final_{delivery_batch_tag}_001.json",
-    [
-        {
-            "product_id": 1501,
-            "product_name": "Production Keyboard",
-            "category": "Accessories",
-            "price": 3499.0
-        }
-    ]
-)
-```
-
-No customer file is created.
-
-### Step 2 — Execute the dedicated job notebook
-
-1. Open `auto-loader-multi-table-operations` under **Jobs & Pipelines**.
-2. Select **Run now**.
-3. Open the completed task output.
-4. Copy the printed pipeline run ID if a specific run needs to be investigated.
-
-The job executes `auto_loader_multi_table_job`; it does not execute the scenario notebook.
-
-### Step 3 — Validate the latest pipeline run
-
-```sql
-WITH latest_run AS (
-    SELECT pipeline_run_id
-    FROM auto_loader_demo.sales_data.auto_loader_run_audit_operations
-    ORDER BY started_at DESC
-    LIMIT 1
-)
-SELECT
-    audit.entity_name,
-    audit.status,
-    audit.run_outcome,
-    audit.files_written,
-    audit.rows_written,
-    audit.micro_batches,
-    audit.duration_seconds,
-    audit.error_message
-FROM auto_loader_demo.sales_data.auto_loader_run_audit_operations AS audit
-INNER JOIN latest_run
-    ON audit.pipeline_run_id = latest_run.pipeline_run_id
-ORDER BY audit.entity_name;
-```
-
-Expected outcomes:
-
-| Entity | Outcome |
-| --- | --- |
-| Orders | `PROCESSED` |
-| Customers | `NO_DATA` |
-| Products | `PROCESSED` |
-
-The job history, run audit, batch audit, checkpoint state, and Bronze metadata should tell a consistent story.
-
----
-
-## 16. Recovery checklist
-
-| Situation | First evidence | Safe next action |
-| --- | --- | --- |
-| Job failed | Task output and run audit | Identify the failed entity and cause |
-| One entity failed | Entity error and file state | Correct the cause and rerun that entity |
-| Entity has `NO_DATA` | Landing folder and delivery SLA | Decide whether no delivery is expected |
-| Backlog grows | Batch metrics and file state | Review arrival rate, throughput, and limits |
-| Reported file is missing | Landing, checkpoint, Bronze, audit | Classify its actual processing stage |
-| Another run is active | Job run history | Allow queue and concurrency policy to act |
-| Historical replay requested | Recovery runbook | Use an isolated replay checkpoint and target |
-
-Never delete a production checkpoint as the first response to an ingestion problem.
-
-## Session takeaway
-
-```text
-Generate source deliveries in the notebook
-        ↓
-Rate controls divide pending work
-        ↓
-Entity audits record outcomes
-        ↓
-Batch metrics expose progress and backlog
-        ↓
-File state supports investigation
-        ↓
-Serverless Jobs control execution
-        ↓
-Targeted recovery handles failures
-```
-
-A production ingestion job must prove what ran, what succeeded, what failed, what remains pending, and what action the operating team should take.
+- `maxFilesPerTrigger` controls micro-batch size; it does not limit the complete `AvailableNow` run.
+- One `AvailableNow` execution can contain several micro-batches.
+- A micro-batch can launch one or more Spark jobs, stages, and tasks.
+- Run audit explains entity outcomes; batch audit explains throughput and backlog.
+- `cloud_files_state()` reports the history associated with the checkpoint supplied to the function.
+- Targeted recovery preserves healthy entities and the existing checkpoint history.
 
 ## References
 
 - [Configure Auto Loader for production workloads](https://learn.microsoft.com/en-us/azure/databricks/ingestion/cloud-object-storage/auto-loader/production)
 - [Monitor and observe Auto Loader](https://docs.databricks.com/aws/en/ingestion/cloud-object-storage/auto-loader/observability)
 - [Configure Structured Streaming triggers](https://learn.microsoft.com/en-us/azure/databricks/structured-streaming/triggers)
+- [Use cloud_files_state](https://learn.microsoft.com/en-us/azure/databricks/sql/language-manual/functions/cloud_files_state)
