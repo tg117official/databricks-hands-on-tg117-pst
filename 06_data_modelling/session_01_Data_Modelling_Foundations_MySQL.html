@@ -1,0 +1,1606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="EcomSphere Session 1: learn data modelling foundations through focused MySQL demonstrations and exercises.">
+  <title>EcomSphere Session 1 - Data Modelling Foundations with MySQL</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-2: #eef4ff;
+      --text: #172033;
+      --muted: #526079;
+      --line: #d8e0ec;
+      --primary: #155eef;
+      --primary-dark: #0f46b9;
+      --primary-soft: #e8f0ff;
+      --accent: #087a63;
+      --accent-soft: #e5f7f2;
+      --warning: #9a5b00;
+      --warning-soft: #fff5df;
+      --danger: #a83232;
+      --danger-soft: #fff0f0;
+      --code-bg: #101827;
+      --code-text: #e8edf7;
+      --shadow: 0 12px 32px rgba(35, 55, 90, 0.10);
+      --radius: 16px;
+    }
+
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0d1320;
+      --surface: #151d2c;
+      --surface-2: #19263d;
+      --text: #edf3ff;
+      --muted: #b1bdd0;
+      --line: #2a3850;
+      --primary: #78a7ff;
+      --primary-dark: #a8c5ff;
+      --primary-soft: #1b3157;
+      --accent: #62d8bd;
+      --accent-soft: #143b35;
+      --warning: #ffc769;
+      --warning-soft: #3f3015;
+      --danger: #ff9292;
+      --danger-soft: #462323;
+      --code-bg: #080d16;
+      --code-text: #edf3ff;
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 17px;
+      line-height: 1.68;
+    }
+
+    a { color: var(--primary); }
+    code, pre, kbd { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
+    code:not(pre code) {
+      padding: 0.14rem 0.36rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface-2);
+      color: var(--primary-dark);
+      font-size: 0.92em;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: -999px;
+      top: 8px;
+      z-index: 100;
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .skip-link:focus { left: 8px; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem max(1rem, calc((100vw - 1160px) / 2));
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(12px);
+    }
+    .brand { font-weight: 800; letter-spacing: -0.02em; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 0.48rem 0.72rem;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover, button:focus-visible { border-color: var(--primary); outline: none; }
+
+    .hero {
+      padding: 4.5rem max(1rem, calc((100vw - 1160px) / 2)) 3.5rem;
+      background:
+        radial-gradient(circle at 88% 20%, rgba(21, 94, 239, 0.18), transparent 31%),
+        linear-gradient(135deg, var(--surface), var(--primary-soft));
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      display: inline-flex;
+      margin-bottom: 0.8rem;
+      padding: 0.26rem 0.62rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { line-height: 1.2; letter-spacing: -0.025em; }
+    h1 { max-width: 900px; margin: 0; font-size: clamp(2.2rem, 5vw, 4.2rem); }
+    .lead { max-width: 800px; margin: 1.2rem 0 0; color: var(--muted); font-size: 1.15rem; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.5rem; }
+    .chip {
+      padding: 0.38rem 0.7rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 260px;
+      gap: 2rem;
+      width: min(1160px, calc(100% - 2rem));
+      margin: 2rem auto 5rem;
+    }
+    main { min-width: 0; }
+    aside { order: 2; }
+    .toc {
+      position: sticky;
+      top: 76px;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .toc strong { display: block; margin-bottom: 0.65rem; }
+    .toc ol { margin: 0; padding-left: 1.2rem; }
+    .toc li { margin: 0.3rem 0; color: var(--muted); font-size: 0.84rem; line-height: 1.35; }
+    .toc a { color: inherit; text-decoration: none; }
+    .toc a:hover { color: var(--primary); text-decoration: underline; }
+
+    section {
+      margin-bottom: 1.5rem;
+      padding: clamp(1.1rem, 2.5vw, 2rem);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      scroll-margin-top: 80px;
+    }
+    h2 { margin: 0 0 1rem; font-size: clamp(1.5rem, 3vw, 2.15rem); }
+    h3 { margin: 1.6rem 0 0.6rem; font-size: 1.18rem; }
+    p { margin: 0.65rem 0 1rem; }
+    ul, ol { padding-left: 1.35rem; }
+    li { margin: 0.35rem 0; }
+
+    .why, .note, .warning, .result {
+      margin: 1rem 0;
+      padding: 0.85rem 1rem;
+      border-left: 4px solid var(--primary);
+      border-radius: 0 10px 10px 0;
+      background: var(--primary-soft);
+    }
+    .note { border-color: var(--accent); background: var(--accent-soft); }
+    .warning { border-color: var(--warning); background: var(--warning-soft); }
+    .result { border-color: var(--accent); background: var(--accent-soft); }
+    .why strong, .note strong, .warning strong, .result strong { color: inherit; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.85rem;
+      margin: 1rem 0;
+    }
+    .card {
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    .card h3 { margin-top: 0; }
+    .card p:last-child { margin-bottom: 0; }
+
+    .table-wrap { margin: 1rem 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 580px; }
+    th, td { padding: 0.72rem 0.82rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--surface-2); font-size: 0.88rem; }
+    tr:last-child td { border-bottom: 0; }
+
+    details {
+      margin: 0.85rem 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    summary {
+      position: relative;
+      padding: 0.85rem 2.7rem 0.85rem 1rem;
+      background: var(--surface-2);
+      font-weight: 800;
+      cursor: pointer;
+      list-style: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: "+";
+      position: absolute;
+      right: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--primary);
+      font-size: 1.4rem;
+    }
+    details[open] summary::after { content: "−"; }
+    details[open] summary { border-bottom: 1px solid var(--line); }
+    .details-body { padding: 1rem; }
+
+    .code-shell { position: relative; margin: 0.5rem 0; }
+    pre {
+      margin: 0;
+      padding: 1rem;
+      overflow: auto;
+      border-radius: 10px;
+      background: var(--code-bg);
+      color: var(--code-text);
+      font-size: 0.86rem;
+      line-height: 1.55;
+      tab-size: 2;
+      white-space: pre;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 0.55rem;
+      right: 0.55rem;
+      border-color: #53627a;
+      background: #1d2a3e;
+      color: #f1f5fb;
+      font-size: 0.72rem;
+    }
+
+    .diagram {
+      margin: 1.1rem 0;
+      padding: 1rem;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface-2);
+    }
+    .diagram svg { display: block; width: 100%; min-width: 600px; height: auto; }
+    figcaption { margin-top: 0.6rem; color: var(--muted); font-size: 0.88rem; }
+
+    .progression {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.6rem;
+      margin: 1rem 0;
+    }
+    .progression-step {
+      position: relative;
+      padding: 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-2);
+      font-size: 0.9rem;
+    }
+    .progression-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -0.55rem;
+      top: 50%;
+      z-index: 2;
+      transform: translateY(-50%);
+      color: var(--primary);
+      font-weight: 900;
+    }
+    .progression-step strong { display: block; color: var(--primary-dark); }
+
+    .exercise {
+      margin: 1.2rem 0;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--surface), var(--surface-2));
+    }
+    .exercise h3 { margin-top: 0; }
+    .task-label {
+      display: inline-block;
+      margin-bottom: 0.45rem;
+      color: var(--primary);
+      font-size: 0.77rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .expected {
+      padding: 0.75rem 0.9rem;
+      border: 1px dashed var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+    }
+
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { display: flex; gap: 0.55rem; align-items: flex-start; }
+    .checklist input { margin-top: 0.4rem; accent-color: var(--primary); }
+    footer { padding: 2rem 1rem 3rem; color: var(--muted); text-align: center; font-size: 0.88rem; }
+
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { order: -1; }
+      .toc { position: static; }
+      .toc ol { columns: 2; }
+      .cards { grid-template-columns: 1fr; }
+      .progression { grid-template-columns: 1fr 1fr; }
+      .progression-step::after { display: none; }
+    }
+    @media (max-width: 620px) {
+      body { font-size: 16px; }
+      .topbar { align-items: flex-start; }
+      .brand { display: none; }
+      .hero { padding-top: 3rem; }
+      .toc ol { columns: 1; }
+      section { padding: 1rem; }
+      button { padding: 0.42rem 0.55rem; }
+      .progression { grid-template-columns: 1fr; }
+    }
+    @media print {
+      .topbar, aside, .copy-btn { display: none !important; }
+      body { background: white; color: black; font-size: 11pt; }
+      .hero { padding: 1.5rem 0; background: white; }
+      .layout { display: block; width: 100%; margin: 0; }
+      section { break-inside: avoid; box-shadow: none; }
+      details > * { display: block !important; }
+      details { break-inside: avoid; }
+      pre { white-space: pre-wrap; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#lesson">Skip to lesson</a>
+
+  <header class="topbar">
+    <div class="brand">EcomSphere Data Engineering</div>
+    <div class="toolbar" aria-label="Page controls">
+      <button type="button" id="expand-all">Expand dropdowns</button>
+      <button type="button" id="collapse-all">Collapse dropdowns</button>
+      <button type="button" id="theme-toggle" aria-pressed="false">Dark theme</button>
+    </div>
+  </header>
+
+  <header class="hero">
+    <span class="eyebrow">Gold Layer Design · Session 1</span>
+    <h1>Data Modelling Foundations with MySQL</h1>
+    <p class="lead">Learn how business rules become entities, attributes, keys, relationships, and physical tables. Short MySQL demonstrations make each idea observable before EcomSphere is redesigned for analytics.</p>
+    <div class="hero-meta" aria-label="Lesson details">
+      <span class="chip">MySQL 8.0+</span>
+      <span class="chip">EcomSphere case study</span>
+      <span class="chip">Indian and US examples</span>
+      <span class="chip">ER diagrams + guided practice</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main id="lesson">
+      <section id="s1">
+        <h2>1. Why model data before building Gold?</h2>
+        <p>An e-commerce platform records customers, products, orders, payments, promotions, inventory, shipments, and refunds. Storing these facts without a model may allow the application to run, but it can also create duplicated customers, missing relationships, inconsistent statuses, and incorrect revenue reports.</p>
+        <p>A <strong>data model</strong> is an agreed structure for business information. It defines what must be stored, how records are identified, how business objects relate, and which rules keep the data trustworthy. When these decisions are clear, engineers can build pipelines and Gold tables that preserve business meaning instead of merely moving columns.</p>
+        <div class="why"><strong>EcomSphere example:</strong> an order may contain several items and have several payment attempts. If those two relationships are combined without understanding their row meaning, the same sale can appear multiple times and inflate revenue.</div>
+
+        <h3>Lesson outcomes</h3>
+        <ul>
+          <li>Identify entities, attributes, records, domains, and table grain.</li>
+          <li>Use primary keys and foreign keys to protect business relationships.</li>
+          <li>Read one-to-one, one-to-many, and many-to-many ER diagrams.</li>
+          <li>Use degree, cardinality, ordinality, and participation constraints correctly.</li>
+          <li>Distinguish conceptual, logical, and physical data models.</li>
+          <li>Explain why operational and analytical models serve different workloads.</li>
+        </ul>
+      </section>
+
+      <section id="s2">
+        <h2>2. Prepare the EcomSphere practice database</h2>
+        <p>Open MySQL Workbench, connect to MySQL 8.0 or later, and open a new SQL tab. Run the complete setup once. It creates a compact operational model containing customers, addresses, products, variants, orders, items, payments, and promotions.</p>
+        <div class="warning"><strong>Reset behaviour:</strong> the first statement drops and recreates only the training database named <code>ecomsphere_modelling</code>. Do not rename it to an existing database that contains important data.</div>
+
+        <details>
+          <summary>Setup 1 - Create all required tables and sample data</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">DROP DATABASE IF EXISTS ecomsphere_modelling;
+CREATE DATABASE ecomsphere_modelling
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_0900_ai_ci;
+
+USE ecomsphere_modelling;
+
+CREATE TABLE customer_status (
+    status_code VARCHAR(20) PRIMARY KEY,
+    status_description VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE order_status (
+    status_code VARCHAR(20) PRIMARY KEY,
+    status_description VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE payment_status (
+    status_code VARCHAR(20) PRIMARY KEY,
+    status_description VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE payment_method (
+    method_code VARCHAR(20) PRIMARY KEY,
+    method_description VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE customer (
+    customer_id BIGINT PRIMARY KEY,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    phone VARCHAR(25),
+    status_code VARCHAR(20) NOT NULL,
+    country_code CHAR(2) NOT NULL,
+    created_at DATETIME NOT NULL,
+    CONSTRAINT fk_customer_status
+      FOREIGN KEY (status_code)
+      REFERENCES customer_status(status_code)
+);
+
+CREATE TABLE customer_address (
+    address_id BIGINT PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    address_type VARCHAR(20) NOT NULL,
+    city VARCHAR(80) NOT NULL,
+    state_region VARCHAR(80) NOT NULL,
+    postal_code VARCHAR(15) NOT NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT fk_address_customer
+      FOREIGN KEY (customer_id)
+      REFERENCES customer(customer_id)
+);
+
+CREATE TABLE product (
+    product_id BIGINT PRIMARY KEY,
+    product_name VARCHAR(150) NOT NULL,
+    brand_name VARCHAR(80) NOT NULL,
+    category_name VARCHAR(80) NOT NULL
+);
+
+CREATE TABLE product_variant (
+    variant_id BIGINT PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    sku VARCHAR(60) NOT NULL UNIQUE,
+    colour VARCHAR(40),
+    size_or_capacity VARCHAR(40),
+    selling_price DECIMAL(12, 2) NOT NULL,
+    currency_code CHAR(3) NOT NULL,
+    CONSTRAINT chk_variant_price
+      CHECK (selling_price &gt;= 0),
+    CONSTRAINT fk_variant_product
+      FOREIGN KEY (product_id)
+      REFERENCES product(product_id)
+);
+
+CREATE TABLE orders (
+    order_id BIGINT PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    status_code VARCHAR(20) NOT NULL,
+    order_channel VARCHAR(30) NOT NULL,
+    currency_code CHAR(3) NOT NULL,
+    ordered_at DATETIME NOT NULL,
+    grand_total DECIMAL(12, 2) NOT NULL,
+    CONSTRAINT chk_order_total
+      CHECK (grand_total &gt;= 0),
+    CONSTRAINT fk_order_customer
+      FOREIGN KEY (customer_id)
+      REFERENCES customer(customer_id),
+    CONSTRAINT fk_order_status
+      FOREIGN KEY (status_code)
+      REFERENCES order_status(status_code)
+);
+
+CREATE TABLE order_item (
+    order_item_id BIGINT PRIMARY KEY,
+    order_id BIGINT NOT NULL,
+    variant_id BIGINT NOT NULL,
+    quantity INT NOT NULL,
+    unit_price DECIMAL(12, 2) NOT NULL,
+    line_total DECIMAL(12, 2) NOT NULL,
+    CONSTRAINT chk_item_quantity
+      CHECK (quantity &gt; 0),
+    CONSTRAINT chk_item_amounts
+      CHECK (unit_price &gt;= 0 AND line_total &gt;= 0),
+    CONSTRAINT fk_item_order
+      FOREIGN KEY (order_id)
+      REFERENCES orders(order_id),
+    CONSTRAINT fk_item_variant
+      FOREIGN KEY (variant_id)
+      REFERENCES product_variant(variant_id)
+);
+
+CREATE TABLE payment (
+    payment_id BIGINT PRIMARY KEY,
+    order_id BIGINT NOT NULL,
+    method_code VARCHAR(20) NOT NULL,
+    status_code VARCHAR(20) NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    attempted_at DATETIME NOT NULL,
+    CONSTRAINT chk_payment_amount
+      CHECK (amount &gt;= 0),
+    CONSTRAINT fk_payment_order
+      FOREIGN KEY (order_id)
+      REFERENCES orders(order_id),
+    CONSTRAINT fk_payment_method
+      FOREIGN KEY (method_code)
+      REFERENCES payment_method(method_code),
+    CONSTRAINT fk_payment_status
+      FOREIGN KEY (status_code)
+      REFERENCES payment_status(status_code)
+);
+
+CREATE TABLE promotion (
+    promotion_id BIGINT PRIMARY KEY,
+    promotion_code VARCHAR(40) NOT NULL UNIQUE,
+    promotion_name VARCHAR(120) NOT NULL
+);
+
+CREATE TABLE order_promotion (
+    order_id BIGINT NOT NULL,
+    promotion_id BIGINT NOT NULL,
+    discount_amount DECIMAL(12, 2) NOT NULL,
+    PRIMARY KEY (order_id, promotion_id),
+    CONSTRAINT chk_promotion_discount
+      CHECK (discount_amount &gt;= 0),
+    CONSTRAINT fk_order_promotion_order
+      FOREIGN KEY (order_id)
+      REFERENCES orders(order_id),
+    CONSTRAINT fk_order_promotion_promotion
+      FOREIGN KEY (promotion_id)
+      REFERENCES promotion(promotion_id)
+);
+
+INSERT INTO customer_status VALUES
+  ('ACTIVE', 'Customer can place orders'),
+  ('BLOCKED', 'Customer account is blocked');
+
+INSERT INTO order_status VALUES
+  ('PENDING', 'Order created but not paid'),
+  ('PAID', 'Payment completed'),
+  ('SHIPPED', 'Order handed to a carrier');
+
+INSERT INTO payment_status VALUES
+  ('PENDING', 'Payment attempt is being processed'),
+  ('SUCCESS', 'Payment completed successfully'),
+  ('FAILED', 'Payment attempt failed');
+
+INSERT INTO payment_method VALUES
+  ('UPI', 'Unified Payments Interface'),
+  ('CARD', 'Debit or credit card'),
+  ('COD', 'Cash on delivery');
+
+INSERT INTO customer VALUES
+  (101, 'Aditi Sharma', 'aditi.sharma@example.com', '+91-9876500011', 'ACTIVE', 'IN', '2026-08-01 09:15:00'),
+  (102, 'Rohit Verma', 'rohit.verma@example.com', '+91-9876500022', 'ACTIVE', 'IN', '2026-08-02 10:30:00'),
+  (103, 'Maya Johnson', 'maya.johnson@example.com', '+1-512-555-0108', 'ACTIVE', 'US', '2026-08-03 11:45:00'),
+  (104, 'Ethan Miller', 'ethan.miller@example.com', '+1-206-555-0144', 'BLOCKED', 'US', '2026-08-04 14:00:00');
+
+INSERT INTO customer_address VALUES
+  (10001, 101, 'HOME', 'Pune', 'Maharashtra', '411045', TRUE),
+  (10002, 101, 'OFFICE', 'Pune', 'Maharashtra', '411014', FALSE),
+  (10003, 102, 'HOME', 'Mumbai', 'Maharashtra', '400076', TRUE),
+  (10004, 103, 'HOME', 'Austin', 'Texas', '78701', TRUE);
+
+INSERT INTO product VALUES
+  (201, 'Nova X1 Smartphone', 'NovaTech', 'Mobile Phones'),
+  (202, 'Stride Running Shoes', 'StridePro', 'Footwear'),
+  (203, 'USB-C Fast Charging Cable', 'VoltEdge', 'Mobile Accessories'),
+  (204, 'AeroBook 14 Laptop', 'AeroWorks', 'Laptops');
+
+INSERT INTO product_variant VALUES
+  (501, 201, 'NOVA-X1-BLK-128', 'Black', '128 GB', 44999.00, 'INR'),
+  (502, 201, 'NOVA-X1-BLU-256', 'Blue', '256 GB', 54999.00, 'INR'),
+  (601, 202, 'STRIDE-RUN-BLK-09', 'Black', 'UK 9', 6500.00, 'INR'),
+  (701, 203, 'VOLT-CABLE-BLK-1M', 'Black', '1 metre', 899.00, 'INR'),
+  (801, 204, 'AEROBOOK-SLV-16-512', 'Silver', '16 GB / 512 GB', 999.00, 'USD');
+
+INSERT INTO orders VALUES
+  (1001, 101, 'PAID', 'MOBILE_APP', 'INR', '2026-08-20 10:05:00', 45297.00),
+  (1002, 102, 'PENDING', 'WEBSITE', 'INR', '2026-08-21 12:15:00', 6500.00),
+  (1003, 103, 'PAID', 'WEBSITE', 'USD', '2026-08-22 16:40:00', 949.00);
+
+INSERT INTO order_item VALUES
+  (50001, 1001, 501, 1, 44999.00, 44999.00),
+  (50002, 1001, 701, 2, 899.00, 1798.00),
+  (50003, 1002, 601, 1, 6500.00, 6500.00),
+  (50004, 1003, 801, 1, 999.00, 999.00);
+
+INSERT INTO payment VALUES
+  (90001, 1001, 'UPI', 'FAILED', 45297.00, '2026-08-20 10:06:00'),
+  (90002, 1001, 'CARD', 'SUCCESS', 45297.00, '2026-08-20 10:09:00'),
+  (90003, 1003, 'CARD', 'SUCCESS', 949.00, '2026-08-22 16:42:00');
+
+INSERT INTO promotion VALUES
+  (301, 'FESTIVE1000', 'Festival discount'),
+  (302, 'APP500', 'Mobile app discount'),
+  (303, 'USWELCOME50', 'US welcome discount');
+
+INSERT INTO order_promotion VALUES
+  (1001, 301, 1000.00),
+  (1001, 302, 500.00),
+  (1003, 303, 50.00);</code></pre>
+            </div>
+          </div>
+        </details>
+
+        <details>
+          <summary>Setup 2 - Validate that the setup completed</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">USE ecomsphere_modelling;
+
+SELECT 'customer' AS table_name, COUNT(*) AS row_count FROM customer
+UNION ALL
+SELECT 'orders', COUNT(*) FROM orders
+UNION ALL
+SELECT 'order_item', COUNT(*) FROM order_item
+UNION ALL
+SELECT 'payment', COUNT(*) FROM payment
+UNION ALL
+SELECT 'order_promotion', COUNT(*) FROM order_promotion;</code></pre>
+            </div>
+            <div class="expected"><strong>Expected row counts:</strong> customer 4, orders 3, order_item 4, payment 3, and order_promotion 3.</div>
+          </div>
+        </details>
+      </section>
+
+      <section id="s3">
+        <h2>3. Entities, attributes, records, and domains</h2>
+        <p>An <strong>entity</strong> is a person, object, event, or concept that matters to the business. Customer, Product, Order, Payment, and Promotion are EcomSphere entities. A database table is the physical structure used to store records about an entity.</p>
+        <p>An <strong>attribute</strong> describes an entity. A customer's name, email, country, and status are attributes; they become columns in the physical table. A <strong>record</strong> is one occurrence of the entity, such as customer 101, Aditi Sharma.</p>
+        <p>A <strong>domain</strong> defines the allowed kind or range of values. EcomSphere stores customer status in a controlled lookup table, because mixing <code>ACTIVE</code>, <code>Active</code>, and <code>ACTV</code> would split one business category across reports and operational rules.</p>
+
+        <div class="cards">
+          <article class="card">
+            <h3>Entity</h3>
+            <p>Business object or event: Customer, Order, Payment.</p>
+          </article>
+          <article class="card">
+            <h3>Attribute</h3>
+            <p>Descriptive characteristic: email, order date, amount.</p>
+          </article>
+          <article class="card">
+            <h3>Record</h3>
+            <p>One stored occurrence: order 1001 placed by customer 101.</p>
+          </article>
+        </div>
+
+        <h3>Entity type, entity instance, and entity set</h3>
+        <p><strong>Customer</strong> is an entity type because it describes a kind of business object. <strong>Aditi Sharma</strong> is one entity instance. All customer records stored at a given time form the entity set. In MySQL, these ideas appear as a table definition, one row, and the table's current rows.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Modelling term</th><th>Plain meaning</th><th>MySQL view</th></tr></thead>
+            <tbody>
+              <tr><td>Entity type</td><td>The kind of thing being described</td><td>Table definition</td></tr>
+              <tr><td>Entity instance</td><td>One real example</td><td>One row</td></tr>
+              <tr><td>Entity set</td><td>All current examples of that type</td><td>Current table rows</td></tr>
+              <tr><td>Attribute</td><td>One detail about the entity</td><td>Column</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>First ER diagram: show the business idea</h3>
+        <p>An <strong>Entity-Relationship diagram</strong>, usually called an <strong>ER diagram</strong> or <strong>ERD</strong>, shows entities and the relationships between them. Start with only the business idea. Keys, columns, and relationship limits can be added later.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 900 270" role="img" aria-labelledby="concept-er-title concept-er-desc">
+            <title id="concept-er-title">Conceptual ER diagram for customer and order</title>
+            <desc id="concept-er-desc">Customer and Order entities are connected by the Places relationship.</desc>
+            <g fill="#ffffff" stroke="#8ba9dd" stroke-width="2">
+              <rect x="60" y="75" width="230" height="110" rx="14"></rect>
+              <rect x="610" y="75" width="230" height="110" rx="14"></rect>
+              <polygon points="450,72 555,130 450,188 345,130" fill="#e8f0ff"></polygon>
+            </g>
+            <g fill="#172033" font-family="system-ui, sans-serif" text-anchor="middle">
+              <text x="175" y="125" font-size="23" font-weight="700">Customer</text>
+              <text x="175" y="155" font-size="15">business entity</text>
+              <text x="450" y="137" font-size="21" font-weight="700">places</text>
+              <text x="725" y="125" font-size="23" font-weight="700">Order</text>
+              <text x="725" y="155" font-size="15">business event</text>
+            </g>
+            <g stroke="#155eef" stroke-width="3">
+              <line x1="290" y1="130" x2="345" y2="130"></line>
+              <line x1="555" y1="130" x2="610" y2="130"></line>
+            </g>
+          </svg>
+          <figcaption>This conceptual ERD answers only: which entities exist, and how are they connected?</figcaption>
+        </figure>
+
+        <div class="progression" aria-label="ER diagram learning progression">
+          <div class="progression-step"><strong>Business sentence</strong>Customer places Order</div>
+          <div class="progression-step"><strong>Conceptual ERD</strong>Entities + relationship</div>
+          <div class="progression-step"><strong>Logical ERD</strong>Keys + min–max rules</div>
+          <div class="progression-step"><strong>Physical EER</strong>MySQL tables + data types</div>
+        </div>
+
+        <details>
+          <summary>Demonstration - Inspect attributes, data types, and records</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">USE ecomsphere_modelling;
+
+DESCRIBE customer;
+
+SELECT
+    customer_id,
+    full_name,
+    email,
+    status_code,
+    country_code
+FROM customer
+ORDER BY customer_id;</code></pre>
+            </div>
+            <p><code>DESCRIBE</code> exposes the physical columns and data types. The query then shows four records belonging to the Customer entity.</p>
+          </div>
+        </details>
+
+        <div class="exercise">
+          <span class="task-label">Practice 1</span>
+          <h3>Read a table as a model</h3>
+          <p>Inspect <code>product_variant</code>. Identify its entity, five attributes, its primary key, and two columns whose allowed values should be governed carefully. A variant is the item EcomSphere actually sells, so confusing Product with Product Variant can combine different prices or storage capacities in inventory and sales reports.</p>
+          <details>
+            <summary>Show query</summary>
+            <div class="details-body">
+              <div class="code-shell">
+                <button class="copy-btn" type="button">Copy</button>
+                <pre><code class="language-sql">DESCRIBE product_variant;
+
+SELECT *
+FROM product_variant
+ORDER BY variant_id;</code></pre>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>Show suggested answer</summary>
+            <div class="details-body">
+              <ul>
+                <li><strong>Entity:</strong> Product Variant.</li>
+                <li><strong>Possible attributes:</strong> variant ID, product ID, SKU, colour, size or capacity, selling price, and currency code.</li>
+                <li><strong>Primary key:</strong> <code>variant_id</code>.</li>
+                <li><strong>Governed columns:</strong> <code>currency_code</code> should use supported ISO-style codes, and <code>selling_price</code> must not be negative. <code>sku</code> must also remain unique.</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section id="s4">
+        <h2>4. One row must have one clear meaning</h2>
+        <p>The meaning of one row is the table's <strong>grain</strong>. In <code>orders</code>, one row represents one order. In <code>order_item</code>, one row represents one product variant included in an order. Order 1001 therefore appears once in <code>orders</code> but twice in <code>order_item</code>.</p>
+        <p>Grain is more than a definition: it controls safe calculations. Summing an order-level total after joining it to item-level rows repeats the total once for every item, which can make a dashboard report revenue that the business never earned.</p>
+
+        <details>
+          <summary>Demonstration - Observe two different table grains</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">SELECT 'orders' AS table_name,
+       COUNT(*) AS row_count,
+       'one row per order' AS row_meaning
+FROM orders
+UNION ALL
+SELECT 'order_item',
+       COUNT(*),
+       'one row per order item'
+FROM order_item;
+
+SELECT
+    o.order_id,
+    o.grand_total,
+    oi.order_item_id,
+    oi.variant_id,
+    oi.line_total
+FROM orders AS o
+JOIN order_item AS oi
+  ON o.order_id = oi.order_id
+ORDER BY o.order_id, oi.order_item_id;</code></pre>
+            </div>
+            <div class="result"><strong>Observe:</strong> there are 3 order rows and 4 order-item rows. Order 1001 repeats because it contains two items.</div>
+          </div>
+        </details>
+
+        <details>
+          <summary>Demonstration - See how unclear grain inflates a total</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">-- Incorrect: each order total repeats for every matching item.
+SELECT SUM(o.grand_total) AS incorrect_total
+FROM orders AS o
+JOIN order_item AS oi
+  ON o.order_id = oi.order_id;
+
+-- Correct for this order-level measure: sum the orders table once.
+SELECT SUM(grand_total) AS correct_total
+FROM orders;</code></pre>
+            </div>
+            <div class="expected"><strong>Expected comparison:</strong> incorrect total = 98,043.00; correct total = 52,746.00. These totals mix INR and USD and therefore should not be published as a single monetary figure; currency must be included in the grouping.</div>
+          </div>
+        </details>
+
+        <div class="exercise">
+          <span class="task-label">Practice 2</span>
+          <h3>Produce a valid order-total summary</h3>
+          <p>Calculate order count and total order value by currency. Use only <code>orders</code>, because the measure is stored at order grain.</p>
+          <div class="expected"><strong>Expected result:</strong> INR has 2 orders totalling 51,797.00; USD has 1 order totalling 949.00.</div>
+          <details>
+            <summary>Show solution</summary>
+            <div class="details-body">
+              <div class="code-shell">
+                <button class="copy-btn" type="button">Copy</button>
+                <pre><code class="language-sql">SELECT
+    currency_code,
+    COUNT(*) AS order_count,
+    SUM(grand_total) AS total_order_value
+FROM orders
+GROUP BY currency_code
+ORDER BY currency_code;</code></pre>
+              </div>
+              <p>The grouping respects both the table grain and the currency domain. Currency conversion would require an exchange-rate rule that is outside this session.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section id="s5">
+        <h2>5. Keys identify records and protect relationships</h2>
+        <p>A <strong>primary key</strong> uniquely identifies each row. For example, <code>customer.customer_id</code> distinguishes Aditi Sharma from every other customer even if another person has the same name.</p>
+        <p>A <strong>candidate key</strong> is a minimal attribute, or minimal combination of attributes, that could uniquely identify a row. Customer ID and email may both qualify. The candidate chosen as the primary key becomes the <strong>primary key</strong>; another candidate becomes an <strong>alternate key</strong>.</p>
+        <p>A <strong>business key</strong> has meaning outside the database, such as an email address, SKU, promotion code, or shipment tracking number. A <strong>surrogate key</strong> is a system-created identifier without direct business meaning. Gold dimensions often use surrogate keys because business attributes can change while historical identity must remain stable.</p>
+        <p>A <strong>composite key</strong> combines columns. The primary key of <code>order_promotion</code> is <code>(order_id, promotion_id)</code>, preventing the same promotion from being attached twice to the same order.</p>
+        <p>A <strong>foreign key</strong> requires the referenced parent record to exist. This stops an order from being assigned to customer 999 when customer 999 is absent, protecting customer order history and downstream segmentation.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Key</th><th>EcomSphere example</th><th>Why the business depends on it</th></tr></thead>
+            <tbody>
+              <tr><td>Primary key</td><td><code>orders.order_id</code></td><td>Prevents two stored orders from sharing one identity.</td></tr>
+              <tr><td>Candidate key</td><td><code>customer.email</code></td><td>Could uniquely identify a customer, but it may change.</td></tr>
+              <tr><td>Alternate key</td><td><code>customer.email</code> after customer ID is selected</td><td>Preserves an additional business uniqueness rule.</td></tr>
+              <tr><td>Business key</td><td><code>product_variant.sku</code></td><td>Keeps fulfilment and catalog systems aligned to the same sellable item.</td></tr>
+              <tr><td>Foreign key</td><td><code>orders.customer_id</code></td><td>Prevents an order from being disconnected from its customer.</td></tr>
+              <tr><td>Composite key</td><td><code>(order_id, promotion_id)</code></td><td>Prevents duplicate use of one promotion on the same order.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details>
+          <summary>Demonstration - Inspect the physical key definitions</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">SHOW CREATE TABLE customer;
+SHOW CREATE TABLE orders;
+SHOW CREATE TABLE order_promotion;</code></pre>
+            </div>
+            <p>Look for <code>PRIMARY KEY</code>, <code>UNIQUE</code>, and <code>FOREIGN KEY</code>. These constraints convert business rules into database-enforced rules.</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Planned failure - Observe primary and foreign-key protection</summary>
+          <div class="details-body">
+            <div class="warning"><strong>Run each statement separately.</strong> Both inserts are expected to fail. MySQL rejects them before they can damage the model.</div>
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">-- Expected failure: customer_id 101 already exists.
+INSERT INTO customer (
+    customer_id, full_name, email, phone,
+    status_code, country_code, created_at
+)
+VALUES (
+    101, 'Neha Kapoor', 'neha.kapoor@example.com', '+91-9876500099',
+    'ACTIVE', 'IN', '2026-08-24 10:00:00'
+);
+
+-- Expected failure: customer_id 999 does not exist.
+INSERT INTO orders (
+    order_id, customer_id, status_code, order_channel,
+    currency_code, ordered_at, grand_total
+)
+VALUES (
+    1999, 999, 'PENDING', 'WEBSITE',
+    'INR', '2026-08-24 10:05:00', 1200.00
+);</code></pre>
+            </div>
+            <p>The first statement produces a duplicate primary-key error. The second produces a foreign-key error. The failed rows are not inserted, so no cleanup is required.</p>
+          </div>
+        </details>
+
+        <div class="exercise">
+          <span class="task-label">Practice 3</span>
+          <h3>Choose a suitable identifier</h3>
+          <p>A customer may change their email address after registration. Should EcomSphere use <code>email</code> or <code>customer_id</code> as the primary key? Explain what should still happen to email.</p>
+          <details>
+            <summary>Show suggested answer</summary>
+            <div class="details-body">
+              <p>Use <code>customer_id</code> as the primary key because it is a stable surrogate identifier. Keep <code>email</code> as a required unique business attribute so two active customer records cannot accidentally register with the same address. If email changes, related orders continue to reference the unchanged <code>customer_id</code>.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section id="s6">
+        <h2>6. Build relationships from business sentences</h2>
+        <p>Start with the sentence: <strong>Customer places Order</strong>. Customer and Order are the participating entities. <em>Places</em> is the relationship type because it names the association.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Term</th><th>Plain meaning</th><th>EcomSphere example</th></tr></thead>
+            <tbody>
+              <tr><td>Relationship type</td><td>The kind of association</td><td>Customer <strong>places</strong> Order</td></tr>
+              <tr><td>Relationship instance</td><td>One actual connection</td><td>Aditi Sharma places order 1001</td></tr>
+              <tr><td>Relationship set</td><td>All current connections of that type</td><td>All stored customer-order links</td></tr>
+              <tr><td>Relationship attribute</td><td>A detail about the connection itself</td><td><code>discount_amount</code> in <code>order_promotion</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Degree: how many entity types take part?</h3>
+        <p><strong>Relationship degree</strong> counts entity types, not rows. Most EcomSphere relationships are binary because two entity types take part.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Degree</th><th>Meaning</th><th>Example</th></tr></thead>
+            <tbody>
+              <tr><td>Unary</td><td>One entity type relates to itself</td><td>Category contains subcategory</td></tr>
+              <tr><td>Binary</td><td>Two entity types take part</td><td>Customer places Order</td></tr>
+              <tr><td>Ternary</td><td>Three entity types take part</td><td>Doctor prescribes Medicine to Patient</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The course will use binary relationships in detail. Unary and ternary relationships are introduced here so that their names are familiar when they appear in larger models.</p>
+
+        <h3>Maximum relationship size</h3>
+        <p>The maximum can create one-to-one, one-to-many, or many-to-many relationships. Choosing the wrong maximum changes what the system can store.</p>
+        <ul>
+          <li><strong>One-to-one:</strong> one record relates to at most one record on the other side.</li>
+          <li><strong>One-to-many:</strong> one parent can relate to many children. One customer can place many orders.</li>
+          <li><strong>Many-to-many:</strong> both sides can have many related records. Orders and promotions follow this pattern.</li>
+        </ul>
+
+        <details>
+          <summary>Demonstration - Observe one customer with many orders</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">SELECT
+    c.customer_id,
+    c.full_name,
+    COUNT(o.order_id) AS order_count
+FROM customer AS c
+LEFT JOIN orders AS o
+  ON c.customer_id = o.customer_id
+GROUP BY c.customer_id, c.full_name
+ORDER BY c.customer_id;</code></pre>
+            </div>
+            <p>The <code>LEFT JOIN</code> retains Ethan Miller even though he has no orders. Losing zero-activity customers would make customer-base and conversion analysis incomplete.</p>
+          </div>
+        </details>
+
+        <h3>Turn many-to-many into two one-to-many relationships</h3>
+        <p>One order may use several promotions, and one promotion may be used on several orders. MySQL resolves this through <code>order_promotion</code>. Its <code>discount_amount</code> is a relationship attribute: it describes how much one promotion reduced one order.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 940 310" role="img" aria-labelledby="bridge-title bridge-desc">
+            <title id="bridge-title">Order and promotion many-to-many relationship resolved with a junction table</title>
+            <desc id="bridge-desc">Order connects one-to-many to Order Promotion, which connects many-to-one to Promotion.</desc>
+            <g fill="#ffffff" stroke="#8ba9dd" stroke-width="2">
+              <rect x="35" y="70" width="220" height="150" rx="12"></rect>
+              <rect x="350" y="45" width="240" height="205" rx="12"></rect>
+              <rect x="685" y="70" width="220" height="150" rx="12"></rect>
+            </g>
+            <g fill="#172033" font-family="system-ui, sans-serif">
+              <text x="55" y="105" font-size="22" font-weight="700">ORDER</text>
+              <text x="55" y="140" font-size="15">PK order_id</text>
+              <text x="55" y="170" font-size="15">grand_total</text>
+              <text x="370" y="80" font-size="22" font-weight="700">ORDER_PROMOTION</text>
+              <text x="370" y="115" font-size="15">PK, FK order_id</text>
+              <text x="370" y="145" font-size="15">PK, FK promotion_id</text>
+              <text x="370" y="175" font-size="15">discount_amount</text>
+              <text x="705" y="105" font-size="22" font-weight="700">PROMOTION</text>
+              <text x="705" y="140" font-size="15">PK promotion_id</text>
+              <text x="705" y="170" font-size="15">promotion_code</text>
+            </g>
+            <g stroke="#155eef" stroke-width="3" fill="none">
+              <line x1="255" y1="145" x2="350" y2="145"></line>
+              <line x1="590" y1="145" x2="685" y2="145"></line>
+            </g>
+            <g fill="#526079" font-family="system-ui, sans-serif" font-size="15" text-anchor="middle">
+              <text x="302" y="128">1 to many</text>
+              <text x="637" y="128">many to 1</text>
+              <text x="470" y="290">Together: Order and Promotion are many-to-many</text>
+            </g>
+          </svg>
+          <figcaption>The junction table stores one row for each order-promotion connection and can hold details about that connection.</figcaption>
+        </figure>
+
+        <details>
+          <summary>Demonstration - Traverse a many-to-many relationship</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">SELECT
+    o.order_id,
+    p.promotion_code,
+    op.discount_amount
+FROM orders AS o
+JOIN order_promotion AS op
+  ON o.order_id = op.order_id
+JOIN promotion AS p
+  ON op.promotion_id = p.promotion_id
+ORDER BY o.order_id, p.promotion_code;</code></pre>
+            </div>
+            <div class="result"><strong>Observe:</strong> order 1001 has two promotions, so two relationship records are required.</div>
+          </div>
+        </details>
+      </section>
+
+      <section id="s7">
+        <h2>7. Add minimum and maximum constraints to the ERD</h2>
+        <p>Every relationship needs two limits. The <strong>minimum</strong> says whether zero related records are allowed. The <strong>maximum</strong> says whether the limit is one or many.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Part of the rule</th><th>Course term</th><th>Allowed values</th><th>Plain question</th></tr></thead>
+            <tbody>
+              <tr><td>Minimum</td><td>Ordinality or optionality</td><td>0 or 1</td><td>Can this record exist without the relationship?</td></tr>
+              <tr><td>Maximum</td><td>Cardinality</td><td>1 or many</td><td>How many related records are allowed at most?</td></tr>
+              <tr><td>Minimum label</td><td>Participation constraint</td><td>Partial or total</td><td>Is participation optional or mandatory?</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Minimum 0 means <strong>optional</strong> or <strong>partial participation</strong>. Minimum 1 means <strong>mandatory</strong> or <strong>total participation</strong>. These are different names for the same minimum rule, so they should be learned together.</p>
+        <div class="note"><strong>Course convention:</strong> this lesson uses cardinality for the maximum and ordinality for the minimum. Some books use “cardinality” for the complete min–max pair. Always check the notation being used.</div>
+
+        <h3>Four min–max combinations</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Min–max</th><th>Meaning</th><th>Simple wording</th></tr></thead>
+            <tbody>
+              <tr><td><code>0..1</code></td><td>Optional, at most one</td><td>May have one</td></tr>
+              <tr><td><code>1..1</code></td><td>Mandatory, exactly one</td><td>Must have one</td></tr>
+              <tr><td><code>0..N</code></td><td>Optional, many allowed</td><td>May have many</td></tr>
+              <tr><td><code>1..N</code></td><td>Mandatory, many allowed</td><td>Must have at least one</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Second ER diagram: show the complete business rule</h3>
+        <p>The diagram now adds Crow's Foot-style min–max symbols. Read the symbol near an entity to learn how many instances of that entity can be related to one instance on the other side.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 940 320" role="img" aria-labelledby="crow-title crow-desc">
+            <title id="crow-title">Customer to order relationship with min-max constraints</title>
+            <desc id="crow-desc">Each order has exactly one customer, while each customer can have zero to many orders.</desc>
+            <g fill="#ffffff" stroke="#8ba9dd" stroke-width="2">
+              <rect x="45" y="80" width="250" height="120" rx="14"></rect>
+              <rect x="645" y="80" width="250" height="120" rx="14"></rect>
+            </g>
+            <g fill="#172033" font-family="system-ui, sans-serif" text-anchor="middle">
+              <text x="170" y="135" font-size="24" font-weight="700">CUSTOMER</text>
+              <text x="170" y="170" font-size="15">customer_id</text>
+              <text x="770" y="135" font-size="24" font-weight="700">ORDER</text>
+              <text x="770" y="170" font-size="15">order_id, customer_id</text>
+            </g>
+            <line x1="295" y1="140" x2="645" y2="140" stroke="#155eef" stroke-width="3"></line>
+            <g stroke="#155eef" stroke-width="3" fill="none">
+              <line x1="318" y1="120" x2="318" y2="160"></line>
+              <line x1="332" y1="120" x2="332" y2="160"></line>
+              <circle cx="595" cy="140" r="11"></circle>
+              <line x1="610" y1="140" x2="642" y2="112"></line>
+              <line x1="610" y1="140" x2="642" y2="140"></line>
+              <line x1="610" y1="140" x2="642" y2="168"></line>
+            </g>
+            <g fill="#526079" font-family="system-ui, sans-serif" font-size="16" text-anchor="middle">
+              <text x="325" y="220">1..1 Customer</text>
+              <text x="595" y="220">0..N Orders</text>
+              <text x="470" y="265">Each order must have exactly one customer.</text>
+              <text x="470" y="292">Each customer may have zero or many orders.</text>
+            </g>
+          </svg>
+          <figcaption>The two short lines mean exactly one. The circle plus Crow's Foot means zero or many.</figcaption>
+        </figure>
+
+        <h3>Apply min–max rules to EcomSphere</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Business rule</th><th>Minimum</th><th>Maximum</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td>A customer may save addresses</td><td>0</td><td>Many</td><td>A newly registered customer can exist before saving an address.</td></tr>
+              <tr><td>An order belongs to a customer</td><td>1</td><td>1</td><td>An orphan order would make ownership and support resolution unreliable.</td></tr>
+              <tr><td>An order contains items</td><td>1</td><td>Many</td><td>An order with no items has no sellable content.</td></tr>
+              <tr><td>An order may have payment attempts</td><td>0</td><td>Many</td><td>A pending checkout can exist before payment, and retries must be preserved.</td></tr>
+              <tr><td>An order may use promotions</td><td>0</td><td>Many</td><td>Discounts are optional and multiple promotions may be allowed.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="warning"><strong>Model rule versus database rule:</strong> <code>orders.customer_id NOT NULL</code> plus a foreign key ensures that every order has a valid customer. The foreign key does not ensure that every customer has an order, or that every order already has an item. Some parent-side minimum rules need transaction logic, application logic, or an additional database control.</div>
+
+        <details>
+          <summary>Demonstration - Observe optional and repeated payment attempts</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">SELECT
+    o.order_id,
+    o.status_code AS order_status,
+    COUNT(p.payment_id) AS payment_attempts,
+    COALESCE(
+      GROUP_CONCAT(p.status_code ORDER BY p.attempted_at SEPARATOR ' -&gt; '),
+      'NO PAYMENT ATTEMPT'
+    ) AS payment_journey
+FROM orders AS o
+LEFT JOIN payment AS p
+  ON o.order_id = p.order_id
+GROUP BY o.order_id, o.status_code
+ORDER BY o.order_id;</code></pre>
+            </div>
+            <div class="expected"><strong>Expected pattern:</strong> order 1001 has FAILED → SUCCESS, order 1002 has no payment attempt, and order 1003 has SUCCESS.</div>
+            <p>Keeping every attempt supports reconciliation and payment-failure analysis. Storing only the final success would hide gateway problems and retry behaviour.</p>
+          </div>
+        </details>
+
+        <div class="exercise">
+          <span class="task-label">Practice 4</span>
+          <h3>Interpret customer-address participation</h3>
+          <p>Write a query that returns every customer and their number of saved addresses, including customers with none. Then state the minimum and maximum number of addresses allowed by the sample model.</p>
+          <details>
+            <summary>Show solution</summary>
+            <div class="details-body">
+              <div class="code-shell">
+                <button class="copy-btn" type="button">Copy</button>
+                <pre><code class="language-sql">SELECT
+    c.customer_id,
+    c.full_name,
+    COUNT(a.address_id) AS address_count
+FROM customer AS c
+LEFT JOIN customer_address AS a
+  ON c.customer_id = a.customer_id
+GROUP BY c.customer_id, c.full_name
+ORDER BY c.customer_id;</code></pre>
+              </div>
+              <p>The relationship is <code>0..N</code> from Customer to Customer Address. Its ordinality is 0, its maximum cardinality is many, and Customer has partial participation. Aditi has two addresses, while Ethan has none. An inner join would silently exclude customers without addresses.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section id="s8">
+        <h2>8. Move from a simple ERD to a physical MySQL EER diagram</h2>
+        <p>A model can be shown at three levels. Start with a simple business picture and add detail only when it is needed. This makes a large model easier to read.</p>
+
+        <div class="cards">
+          <article class="card">
+            <h3>Conceptual</h3>
+            <p>Shows major business entities and high-level relationships. A product owner can confirm that Customer places Order without reviewing SQL types.</p>
+          </article>
+          <article class="card">
+            <h3>Logical</h3>
+            <p>Adds attributes, keys, min–max constraints, and business rules while remaining mostly platform-neutral.</p>
+          </article>
+          <article class="card">
+            <h3>Physical</h3>
+            <p>Defines MySQL tables, column names, data types, constraints, indexes, and implementation details that the database executes.</p>
+          </article>
+        </div>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 900 270" role="img" aria-labelledby="levels-title levels-desc">
+            <title id="levels-title">Three levels of a data model</title>
+            <desc id="levels-desc">Conceptual business view becomes a logical design and then a MySQL physical implementation.</desc>
+            <defs>
+              <marker id="arrow2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L9,3 z" fill="#087a63"></path>
+              </marker>
+            </defs>
+            <g fill="#ffffff" stroke="#78b6a7" stroke-width="2">
+              <rect x="30" y="50" width="220" height="145" rx="16"></rect>
+              <rect x="340" y="50" width="220" height="145" rx="16"></rect>
+              <rect x="650" y="50" width="220" height="145" rx="16"></rect>
+            </g>
+            <g fill="#172033" font-family="system-ui, sans-serif" text-anchor="middle">
+              <text x="140" y="88" font-size="21" font-weight="700">Conceptual</text>
+              <text x="140" y="120" font-size="15">Customer places Order</text>
+              <text x="140" y="150" font-size="15">Business view</text>
+              <text x="450" y="88" font-size="21" font-weight="700">Logical</text>
+              <text x="450" y="120" font-size="15">Keys, attributes, rules</text>
+              <text x="450" y="150" font-size="15">Platform-neutral design</text>
+              <text x="760" y="88" font-size="21" font-weight="700">Physical</text>
+              <text x="760" y="120" font-size="15">BIGINT, VARCHAR, FK</text>
+              <text x="760" y="150" font-size="15">MySQL implementation</text>
+            </g>
+            <g fill="none" stroke="#087a63" stroke-width="3" marker-end="url(#arrow2)">
+              <path d="M250 123 L330 123"></path>
+              <path d="M560 123 L640 123"></path>
+            </g>
+          </svg>
+          <figcaption>Each step adds implementation detail without changing the underlying business rule.</figcaption>
+        </figure>
+
+        <h3>Third ER diagram: show the MySQL implementation</h3>
+        <p>The physical diagram shows table and column names, keys, and data types. MySQL Workbench calls this an <strong>Enhanced Entity-Relationship diagram</strong>, or <strong>EER diagram</strong>.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 960 470" role="img" aria-labelledby="physical-title physical-desc">
+            <title id="physical-title">Physical customer and orders EER diagram</title>
+            <desc id="physical-desc">Customer and Orders tables include columns, data types, primary keys, a foreign key, and a one-to-many relationship.</desc>
+            <g stroke="#8ba9dd" stroke-width="2">
+              <rect x="45" y="45" width="355" height="335" rx="12" fill="#ffffff"></rect>
+              <rect x="560" y="45" width="355" height="335" rx="12" fill="#ffffff"></rect>
+              <path d="M45 100 H400 M560 100 H915" fill="none"></path>
+            </g>
+            <g fill="#155eef">
+              <rect x="45" y="45" width="355" height="55" rx="12"></rect>
+              <rect x="560" y="45" width="355" height="55" rx="12"></rect>
+            </g>
+            <g fill="#ffffff" font-family="system-ui, sans-serif" font-size="22" font-weight="700">
+              <text x="65" y="80">customer</text>
+              <text x="580" y="80">orders</text>
+            </g>
+            <g fill="#172033" font-family="ui-monospace, monospace" font-size="15">
+              <text x="65" y="135" font-weight="700">PK  customer_id       BIGINT</text>
+              <text x="65" y="172">    full_name         VARCHAR(100)</text>
+              <text x="65" y="209">UQ  email             VARCHAR(150)</text>
+              <text x="65" y="246">    status_code       VARCHAR(20)</text>
+              <text x="65" y="283">    country_code      CHAR(2)</text>
+              <text x="580" y="135" font-weight="700">PK  order_id          BIGINT</text>
+              <text x="580" y="172" font-weight="700">FK  customer_id       BIGINT</text>
+              <text x="580" y="209">    status_code       VARCHAR(20)</text>
+              <text x="580" y="246">    currency_code     CHAR(3)</text>
+              <text x="580" y="283">    ordered_at        DATETIME</text>
+              <text x="580" y="320">    grand_total       DECIMAL(12,2)</text>
+            </g>
+            <line x1="400" y1="190" x2="560" y2="190" stroke="#155eef" stroke-width="3"></line>
+            <g stroke="#155eef" stroke-width="3" fill="none">
+              <line x1="420" y1="170" x2="420" y2="210"></line>
+              <line x1="434" y1="170" x2="434" y2="210"></line>
+              <circle cx="512" cy="190" r="10"></circle>
+              <line x1="525" y1="190" x2="557" y2="162"></line>
+              <line x1="525" y1="190" x2="557" y2="190"></line>
+              <line x1="525" y1="190" x2="557" y2="218"></line>
+            </g>
+            <g fill="#526079" font-family="system-ui, sans-serif" text-anchor="middle">
+              <text x="480" y="415" font-size="17">One customer may have zero or many orders.</text>
+              <text x="480" y="445" font-size="17">Every order must reference exactly one customer.</text>
+            </g>
+          </svg>
+          <figcaption>The logical rule is now visible as MySQL columns, data types, key markers, and a relationship line.</figcaption>
+        </figure>
+
+        <details>
+          <summary>Hands-on - Generate the EER diagram in MySQL Workbench</summary>
+          <div class="details-body">
+            <ol>
+              <li>Finish running the setup script from Section 2.</li>
+              <li>In MySQL Workbench, select <strong>Database → Reverse Engineer</strong>.</li>
+              <li>Select the same MySQL connection and continue after the connection check succeeds.</li>
+              <li>Select the <code>ecomsphere_modelling</code> schema.</li>
+              <li>On the object-selection page, keep <strong>Place imported objects on a diagram</strong> selected.</li>
+              <li>For a readable first diagram, select <code>customer</code>, <code>customer_address</code>, <code>orders</code>, <code>order_item</code>, <code>payment</code>, <code>promotion</code>, and <code>order_promotion</code>.</li>
+              <li>Complete the wizard and arrange the tables so that relationship lines do not cross table names.</li>
+              <li>Save the model as an <code>.mwb</code> file if you want to reopen it later.</li>
+            </ol>
+            <p>Workbench reads the foreign keys from MySQL and draws the EER relationships automatically. You can compare its physical diagram with the simpler conceptual and logical diagrams shown earlier.</p>
+            <p><a href="https://dev.mysql.com/doc/workbench/en/wb-reverse-engineer-live.html" target="_blank" rel="noopener">MySQL Workbench: reverse-engineer a live database</a></p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Demonstration - Connect a logical rule to MySQL DDL</summary>
+          <div class="details-body">
+            <p><strong>Logical rule:</strong> every order must belong to exactly one existing customer, and an order total cannot be negative.</p>
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">SHOW CREATE TABLE orders;
+
+-- Find the physical elements that implement the logical rule:
+-- customer_id BIGINT NOT NULL
+-- FOREIGN KEY (customer_id) REFERENCES customer(customer_id)
+-- CHECK (grand_total &gt;= 0)</code></pre>
+            </div>
+            <p><code>NOT NULL</code> makes customer participation mandatory, the foreign key requires a valid customer, and the check constraint prevents a negative total.</p>
+          </div>
+        </details>
+
+        <div class="exercise">
+          <span class="task-label">Practice 5</span>
+          <h3>Classify modelling decisions</h3>
+          <p>Classify each statement as conceptual, logical, or physical.</p>
+          <ol>
+            <li>A customer places orders.</li>
+            <li>An order has <code>order_id</code>, <code>ordered_at</code>, and <code>grand_total</code>.</li>
+            <li><code>grand_total</code> uses <code>DECIMAL(12,2)</code> in MySQL.</li>
+            <li>One order contains one or more order items.</li>
+            <li><code>orders.customer_id</code> is defined as <code>BIGINT NOT NULL</code>.</li>
+          </ol>
+          <details>
+            <summary>Show suggested answer</summary>
+            <div class="details-body">
+              <ol>
+                <li>Conceptual.</li>
+                <li>Logical.</li>
+                <li>Physical.</li>
+                <li>Logical because it includes min–max relationship constraints.</li>
+                <li>Physical because it specifies a platform data type and nullability.</li>
+              </ol>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section id="s9">
+        <h2>9. Operational and analytical models solve different problems</h2>
+        <p>EcomSphere's source model is an <strong>OLTP</strong> model: it supports small, frequent transactions such as registering a customer, placing an order, retrying a payment, reserving inventory, and creating a shipment. Separating related entities reduces unnecessary duplication and makes individual updates safer.</p>
+        <p>Analytics asks broader questions: monthly revenue, payment failure rate, product-category performance, repeat customers, inventory availability, and delivery delays. Answering them directly from many normalized source tables is possible, but every report must repeat complex joins and consistent business rules.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Area</th><th>Operational model</th><th>Analytical model</th></tr></thead>
+            <tbody>
+              <tr><td>Primary purpose</td><td>Run business transactions</td><td>Measure and explain business performance</td></tr>
+              <tr><td>Typical operation</td><td>Insert or update a few rows</td><td>Read, join, filter, and aggregate many rows</td></tr>
+              <tr><td>Design tendency</td><td>Normalized</td><td>Dimensional or intentionally denormalized</td></tr>
+              <tr><td>EcomSphere example</td><td>Record a new payment attempt</td><td>Calculate payment success rate by channel</td></tr>
+              <tr><td>Medallion position</td><td>Source represented through Bronze and Silver</td><td>Gold serving models</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details>
+          <summary>Demonstration - Run a small analytical query on operational tables</summary>
+          <div class="details-body">
+            <div class="code-shell">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre><code class="language-sql">SELECT
+    DATE_FORMAT(ordered_at, '%Y-%m') AS order_month,
+    currency_code,
+    COUNT(*) AS paid_order_count,
+    SUM(grand_total) AS paid_order_value
+FROM orders
+WHERE status_code = 'PAID'
+GROUP BY
+    DATE_FORMAT(ordered_at, '%Y-%m'),
+    currency_code
+ORDER BY order_month, currency_code;</code></pre>
+            </div>
+            <div class="expected"><strong>Expected result:</strong> August 2026 contains one paid INR order worth 45,297.00 and one paid USD order worth 949.00.</div>
+            <p>Even this small report needs an agreed definition of “paid,” a time period, a measure grain, and currency separation. Gold design centralizes such decisions so dashboards do not implement conflicting versions of revenue.</p>
+          </div>
+        </details>
+      </section>
+
+      <section id="s10">
+        <h2>10. Integrated EcomSphere challenge</h2>
+        <p>EcomSphere wants a customer-order summary showing every customer, number of orders, and total value split by currency. Customers with no orders must remain visible because the marketing team uses the result to distinguish purchasers from registered non-purchasers.</p>
+
+        <div class="exercise">
+          <span class="task-label">Practice 6</span>
+          <h3>Build the customer-order summary</h3>
+          <p>Create a query using <code>customer</code> and <code>orders</code>. Keep all customers, group monetary values by currency, and avoid joining <code>order_item</code> because the requested measure is stored at order grain.</p>
+          <ul>
+            <li>Return customer ID, name, currency, order count, and order value.</li>
+            <li>Use <code>NO_ORDER_CURRENCY</code> for customers without orders.</li>
+            <li>Return zero instead of null for their order value.</li>
+          </ul>
+          <details>
+            <summary>Show solution</summary>
+            <div class="details-body">
+              <div class="code-shell">
+                <button class="copy-btn" type="button">Copy</button>
+                <pre><code class="language-sql">SELECT
+    c.customer_id,
+    c.full_name,
+    COALESCE(o.currency_code, 'NO_ORDER_CURRENCY') AS currency_code,
+    COUNT(o.order_id) AS order_count,
+    COALESCE(SUM(o.grand_total), 0.00) AS total_order_value
+FROM customer AS c
+LEFT JOIN orders AS o
+  ON c.customer_id = o.customer_id
+GROUP BY
+    c.customer_id,
+    c.full_name,
+    COALESCE(o.currency_code, 'NO_ORDER_CURRENCY')
+ORDER BY c.customer_id, currency_code;</code></pre>
+              </div>
+              <p>The left join retains Ethan Miller, who has no order. Grouping by currency prevents unlike monetary units from being added. Staying at order grain prevents order totals from being repeated by item rows.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section id="s11">
+        <h2>11. Common mistakes and better choices</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Mistake</th><th>Better choice</th><th>Consequence avoided</th></tr></thead>
+            <tbody>
+              <tr><td>Start by listing columns without business rules</td><td>Identify the process, entities, and relationships first</td><td>Important events such as payment retries are not lost.</td></tr>
+              <tr><td>Assume every column ending in <code>_id</code> is a primary key</td><td>Identify whether it is primary, foreign, business, or part of a composite key</td><td>Relationships and uniqueness rules stay accurate.</td></tr>
+              <tr><td>Use a changing email as the customer primary key</td><td>Use a stable customer ID and keep email unique</td><td>Customer history survives email changes.</td></tr>
+              <tr><td>Store several promotion IDs in one text column</td><td>Use <code>order_promotion</code></td><td>Promotions remain queryable and discount amounts stay attributable.</td></tr>
+              <tr><td>Draw only 1:M and ignore the minimum</td><td>Add <code>0..N</code>, <code>1..N</code>, or another complete min–max rule</td><td>The model shows whether participation is optional or mandatory.</td></tr>
+              <tr><td>Put every column into the first ER diagram</td><td>Move from conceptual to logical to physical detail</td><td>New readers can understand the business before reading implementation details.</td></tr>
+              <tr><td>Sum an order measure after joining to items</td><td>Aggregate at the measure's declared grain</td><td>Revenue is not multiplied by item count.</td></tr>
+              <tr><td>Use an inner join when zero related records matter</td><td>Use a left join where business questions require complete parent coverage</td><td>Customers with no address, order, or payment are not silently removed.</td></tr>
+              <tr><td>Add INR and USD values directly</td><td>Group by currency or apply a governed conversion rule</td><td>Financial totals remain meaningful.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="s12">
+        <h2>12. Quick knowledge check</h2>
+        <p>Answer each question before opening its answer.</p>
+
+        <details>
+          <summary>1. What is the difference between an entity and a table?</summary>
+          <div class="details-body"><p>An entity is a business object, event, or concept. A table is a physical database structure used to store records about it.</p></div>
+        </details>
+        <details>
+          <summary>2. What does one row in order_item represent?</summary>
+          <div class="details-body"><p>One product-variant line included in an order. This is order-item grain, not order grain.</p></div>
+        </details>
+        <details>
+          <summary>3. Why is customer_id preferred over email as the primary key?</summary>
+          <div class="details-body"><p><code>customer_id</code> is stable and has no changing business meaning. Email can change, although it should still be governed as a unique business attribute.</p></div>
+        </details>
+        <details>
+          <summary>4. Which relationship exists between Order and Payment?</summary>
+          <div class="details-body"><p>One-to-many. One order may have zero or many payment attempts, while each payment attempt belongs to one order.</p></div>
+        </details>
+        <details>
+          <summary>5. Why is order_promotion required?</summary>
+          <div class="details-body"><p>It resolves the many-to-many relationship between orders and promotions and stores the discount amount contributed by each relationship.</p></div>
+        </details>
+        <details>
+          <summary>6. What is the difference between cardinality and ordinality?</summary>
+          <div class="details-body"><p>In this course, cardinality gives the maximum, such as one or many. Ordinality gives the minimum, such as zero or one. Optionality is another way to discuss the same minimum rule.</p></div>
+        </details>
+        <details>
+          <summary>7. How are ordinality and participation constraints connected?</summary>
+          <div class="details-body"><p>Minimum 0 means optional or partial participation. Minimum 1 means mandatory or total participation.</p></div>
+        </details>
+        <details>
+          <summary>8. What is relationship degree?</summary>
+          <div class="details-body"><p>Degree is the number of entity types taking part. Customer places Order is binary because two entity types participate.</p></div>
+        </details>
+        <details>
+          <summary>9. Which model contains DECIMAL(12,2) and FOREIGN KEY syntax?</summary>
+          <div class="details-body"><p>The physical model, because those are database implementation details.</p></div>
+        </details>
+        <details>
+          <summary>10. Why did joining orders to order_item inflate the order total?</summary>
+          <div class="details-body"><p>The order-level total repeated once for each matching item-level row. The measure and the joined rows had different grains.</p></div>
+        </details>
+        <details>
+          <summary>11. Why should INR and USD totals not be added directly?</summary>
+          <div class="details-body"><p>They are different units of measure. Values must remain grouped by currency or be converted with a governed exchange-rate rule.</p></div>
+        </details>
+        <details>
+          <summary>12. Why will the Gold model differ from the operational source model?</summary>
+          <div class="details-body"><p>The operational model is optimized for safe day-to-day transactions. Gold models are organized around consistent analytical questions, measures, filtering, grouping, and reporting performance.</p></div>
+        </details>
+      </section>
+
+      <section id="s13">
+        <h2>13. Session summary</h2>
+        <ul>
+          <li>Data modelling turns business rules into structures that engineers and databases can enforce.</li>
+          <li>Entities describe business objects or events; attributes describe their characteristics.</li>
+          <li>Every table needs a clear one-row meaning, called its grain.</li>
+          <li>Primary keys identify rows, while foreign keys connect valid parent and child records.</li>
+          <li>Business keys carry business meaning; surrogate keys provide stable system identity.</li>
+          <li>One-to-many and many-to-many relationships must reflect actual business behaviour.</li>
+          <li>Relationship degree counts participating entity types.</li>
+          <li>Cardinality describes the maximum; ordinality or optionality describes the minimum.</li>
+          <li>Minimum 0 means partial participation; minimum 1 means total participation.</li>
+          <li>ER diagrams can progress from a business view to a complete MySQL EER implementation.</li>
+          <li>Conceptual, logical, and physical models add progressively more detail.</li>
+          <li>Operational models support transactions; Gold models support governed analytics.</li>
+          <li>Grain, currency, and join choices directly affect whether financial results are correct.</li>
+        </ul>
+
+        <h3>Confidence checklist</h3>
+        <ul class="checklist">
+          <li><input type="checkbox" id="c1"><label for="c1">I can distinguish an entity, attribute, record, and domain.</label></li>
+          <li><input type="checkbox" id="c2"><label for="c2">I can state what one row represents in each EcomSphere table.</label></li>
+          <li><input type="checkbox" id="c3"><label for="c3">I can identify primary, foreign, business, surrogate, and composite keys.</label></li>
+          <li><input type="checkbox" id="c4"><label for="c4">I can read one-to-many and many-to-many ER diagrams.</label></li>
+          <li><input type="checkbox" id="c5"><label for="c5">I can explain degree, cardinality, ordinality, and participation.</label></li>
+          <li><input type="checkbox" id="c6"><label for="c6">I can classify a modelling decision as conceptual, logical, or physical.</label></li>
+          <li><input type="checkbox" id="c7"><label for="c7">I can explain how an incorrect join can inflate a measure.</label></li>
+          <li><input type="checkbox" id="c8"><label for="c8">I can explain why Gold design differs from the OLTP source model.</label></li>
+          <li><input type="checkbox" id="c9"><label for="c9">I can generate and read an EER diagram in MySQL Workbench.</label></li>
+        </ul>
+
+        <div class="note"><strong>Next:</strong> Session 2 examines data duplication, insert/update/delete anomalies, and First, Second, and Third Normal Forms. The same EcomSphere model will show why operational systems separate customers, products, variants, orders, items, payments, and promotions.</div>
+      </section>
+    </main>
+
+    <aside aria-label="Lesson navigation">
+      <nav class="toc">
+        <strong>Lesson index</strong>
+        <ol>
+          <li><a href="#s1">Why model data?</a></li>
+          <li><a href="#s2">MySQL setup</a></li>
+          <li><a href="#s3">Entities and attributes</a></li>
+          <li><a href="#s4">One-row meaning</a></li>
+          <li><a href="#s5">Keys</a></li>
+          <li><a href="#s6">Build relationships</a></li>
+          <li><a href="#s7">Min–max constraints</a></li>
+          <li><a href="#s8">ERD to MySQL EER</a></li>
+          <li><a href="#s9">Operational vs analytical</a></li>
+          <li><a href="#s10">Integrated challenge</a></li>
+          <li><a href="#s11">Common mistakes</a></li>
+          <li><a href="#s12">Knowledge check</a></li>
+          <li><a href="#s13">Summary</a></li>
+        </ol>
+      </nav>
+    </aside>
+  </div>
+
+  <footer>EcomSphere · Data Modelling for Gold Layer Design · Session 1</footer>
+
+  <script>
+    const details = Array.from(document.querySelectorAll('details'));
+    document.getElementById('expand-all').addEventListener('click', () => {
+      details.forEach((item) => { item.open = true; });
+    });
+    document.getElementById('collapse-all').addEventListener('click', () => {
+      details.forEach((item) => { item.open = false; });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    const themeButton = document.getElementById('theme-toggle');
+    themeButton.addEventListener('click', () => {
+      const isDark = document.documentElement.dataset.theme === 'dark';
+      document.documentElement.dataset.theme = isDark ? 'light' : 'dark';
+      themeButton.textContent = isDark ? 'Dark theme' : 'Light theme';
+      themeButton.setAttribute('aria-pressed', String(!isDark));
+    });
+
+    document.querySelectorAll('.copy-btn').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const code = button.parentElement.querySelector('code').textContent;
+        try {
+          await navigator.clipboard.writeText(code);
+          const oldText = button.textContent;
+          button.textContent = 'Copied';
+          window.setTimeout(() => { button.textContent = oldText; }, 1400);
+        } catch (error) {
+          button.textContent = 'Select and copy';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

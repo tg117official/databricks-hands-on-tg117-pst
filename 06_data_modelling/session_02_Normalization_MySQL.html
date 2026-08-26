@@ -1,0 +1,1605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A hands-on MySQL lesson that normalizes EcomSphere data from an unnormalized table through 1NF, 2NF, 3NF and BCNF.">
+  <title>EcomSphere Session 2 - Normalization with MySQL</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f6fb;
+      --surface: #ffffff;
+      --surface-2: #edf3ff;
+      --text: #172033;
+      --muted: #526079;
+      --line: #d7dfeb;
+      --primary: #155eef;
+      --primary-dark: #0e46b8;
+      --primary-soft: #e8f0ff;
+      --accent: #087a63;
+      --accent-soft: #e5f7f2;
+      --warning: #985b00;
+      --warning-soft: #fff4dc;
+      --danger: #a83232;
+      --danger-soft: #fff0f0;
+      --code-bg: #101827;
+      --code-text: #eaf0fa;
+      --shadow: 0 12px 30px rgba(35, 55, 90, 0.09);
+      --radius: 16px;
+    }
+
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0d1320;
+      --surface: #151d2c;
+      --surface-2: #19263d;
+      --text: #edf3ff;
+      --muted: #b1bdd0;
+      --line: #2a3850;
+      --primary: #78a7ff;
+      --primary-dark: #a8c5ff;
+      --primary-soft: #1b3157;
+      --accent: #62d8bd;
+      --accent-soft: #143b35;
+      --warning: #ffc769;
+      --warning-soft: #3f3015;
+      --danger: #ff9292;
+      --danger-soft: #462323;
+      --code-bg: #080d16;
+      --code-text: #edf3ff;
+      --shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 17px;
+      line-height: 1.65;
+    }
+
+    a { color: var(--primary); }
+    code, pre, kbd { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
+    code:not(pre code) {
+      padding: 0.12rem 0.34rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface-2);
+      color: var(--primary-dark);
+      font-size: 0.92em;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: -999px;
+      top: 8px;
+      z-index: 100;
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .skip-link:focus { left: 8px; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.72rem max(1rem, calc((100vw - 1180px) / 2));
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(12px);
+    }
+    .brand { font-weight: 800; letter-spacing: -0.02em; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 0.48rem 0.72rem;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    button:hover, button:focus-visible { border-color: var(--primary); outline: none; }
+
+    .hero {
+      padding: 4.2rem max(1rem, calc((100vw - 1180px) / 2)) 3.2rem;
+      background:
+        radial-gradient(circle at 88% 20%, rgba(21, 94, 239, 0.18), transparent 31%),
+        linear-gradient(135deg, var(--surface), var(--primary-soft));
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      display: inline-flex;
+      margin-bottom: 0.8rem;
+      padding: 0.26rem 0.62rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
+    h1 { max-width: 950px; margin: 0; font-size: clamp(2.2rem, 5vw, 4.1rem); }
+    .lead { max-width: 850px; margin: 1.1rem 0 0; color: var(--muted); font-size: 1.12rem; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.45rem; }
+    .chip {
+      padding: 0.38rem 0.7rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 260px;
+      gap: 2rem;
+      width: min(1180px, calc(100% - 2rem));
+      margin: 2rem auto 5rem;
+    }
+    main { min-width: 0; }
+    aside { order: 2; }
+    .toc {
+      position: sticky;
+      top: 76px;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .toc strong { display: block; margin-bottom: 0.65rem; }
+    .toc ol { margin: 0; padding-left: 1.2rem; }
+    .toc li { margin: 0.3rem 0; color: var(--muted); font-size: 0.84rem; line-height: 1.35; }
+    .toc a { color: inherit; text-decoration: none; }
+    .toc a:hover { color: var(--primary); text-decoration: underline; }
+
+    section {
+      margin-bottom: 1.5rem;
+      padding: clamp(1.1rem, 2.5vw, 2rem);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      scroll-margin-top: 80px;
+    }
+    h2 { margin: 0 0 1rem; font-size: clamp(1.5rem, 3vw, 2.1rem); }
+    h3 { margin: 1.55rem 0 0.6rem; font-size: 1.18rem; }
+    h4 { margin: 1.2rem 0 0.35rem; font-size: 1rem; }
+    p { margin: 0.65rem 0 1rem; }
+    ul, ol { padding-left: 1.35rem; }
+    li { margin: 0.34rem 0; }
+
+    .note, .warning, .result, .definition {
+      margin: 1rem 0;
+      padding: 0.86rem 1rem;
+      border-left: 4px solid var(--primary);
+      border-radius: 0 10px 10px 0;
+      background: var(--primary-soft);
+    }
+    .note { border-color: var(--accent); background: var(--accent-soft); }
+    .warning { border-color: var(--warning); background: var(--warning-soft); }
+    .result { border-color: var(--accent); background: var(--accent-soft); }
+    .definition { border-color: var(--primary); background: var(--primary-soft); }
+
+    .journey {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    .journey article {
+      position: relative;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    .journey article:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -0.63rem;
+      top: 50%;
+      z-index: 2;
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      font-weight: 900;
+      line-height: 1.17rem;
+      text-align: center;
+    }
+    .journey strong { display: block; color: var(--primary-dark); }
+    .journey span { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.9rem; }
+
+    .challenge-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    .challenge {
+      padding: 0.85rem 0.95rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    .challenge strong { display: block; margin-bottom: 0.2rem; }
+    .challenge span { color: var(--muted); font-size: 0.94rem; }
+
+    .table-wrap {
+      margin: 1rem 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 600px; }
+    th, td { padding: 0.72rem 0.82rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--surface-2); font-size: 0.88rem; }
+    tr:last-child td { border-bottom: 0; }
+
+    .diagram {
+      margin: 1.15rem 0 1.35rem;
+      padding: 1rem;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #f8fbff;
+    }
+    [data-theme="dark"] .diagram { background: #101827; }
+    .diagram svg { display: block; width: 100%; min-width: 700px; height: auto; }
+    .diagram figcaption { margin-top: 0.7rem; color: var(--muted); font-size: 0.9rem; text-align: center; }
+    .entity { fill: #ffffff; stroke: #155eef; stroke-width: 2; }
+    .entity-head { fill: #155eef; }
+    .entity-title { fill: #ffffff; font: 700 15px Inter, sans-serif; }
+    .entity-text { fill: #172033; font: 13px "Cascadia Code", Consolas, monospace; }
+    .relation { fill: none; stroke: #526079; stroke-width: 2; }
+    .relation-label { fill: #35425a; font: 700 12px Inter, sans-serif; }
+    .pk { fill: #087a63; font-weight: 700; }
+    .fk { fill: #a15a00; font-weight: 700; }
+    [data-theme="dark"] .entity { fill: #182337; stroke: #78a7ff; }
+    [data-theme="dark"] .entity-head { fill: #315d9f; }
+    [data-theme="dark"] .entity-text { fill: #edf3ff; }
+    [data-theme="dark"] .relation { stroke: #b1bdd0; }
+    [data-theme="dark"] .relation-label { fill: #dce6f7; }
+    [data-theme="dark"] .pk { fill: #62d8bd; }
+    [data-theme="dark"] .fk { fill: #ffc769; }
+
+    details.code-panel {
+      margin: 0.9rem 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    details.code-panel > summary {
+      position: relative;
+      padding: 0.9rem 3rem 0.9rem 1rem;
+      background: var(--surface-2);
+      font-weight: 800;
+      cursor: pointer;
+      list-style: none;
+    }
+    details.code-panel > summary::-webkit-details-marker { display: none; }
+    details.code-panel > summary::after {
+      content: "+";
+      position: absolute;
+      right: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.35rem;
+      line-height: 1;
+      color: var(--primary);
+    }
+    details.code-panel[open] > summary::after { content: "−"; }
+    .code-wrap { position: relative; background: var(--code-bg); }
+    .code-label {
+      padding: 0.58rem 5rem 0.35rem 1rem;
+      color: #aab8ce;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .copy-code {
+      position: absolute;
+      right: 0.7rem;
+      top: 0.48rem;
+      border-color: #3a4961;
+      background: #1b273a;
+      color: #f3f7ff;
+      font-size: 0.74rem;
+    }
+    pre {
+      margin: 0;
+      padding: 0.7rem 1rem 1.2rem;
+      overflow-x: auto;
+      color: var(--code-text);
+      font-size: 0.87rem;
+      line-height: 1.62;
+      tab-size: 4;
+    }
+    pre code { color: inherit; }
+
+    .dependency {
+      margin: 0.75rem 0;
+      padding: 0.75rem 0.9rem;
+      overflow-x: auto;
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      background: var(--surface-2);
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.92rem;
+    }
+
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { position: relative; padding-left: 1.7rem; }
+    .checklist li::before { content: "✓"; position: absolute; left: 0; color: var(--accent); font-weight: 900; }
+
+    footer {
+      padding: 1.5rem 1rem 3rem;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { order: 0; }
+      .toc { position: static; }
+      .journey { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .journey article::after { display: none; }
+    }
+    @media (max-width: 640px) {
+      body { font-size: 16px; }
+      .hero { padding-top: 3rem; }
+      .challenge-grid, .journey { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; }
+      .brand { max-width: 60%; }
+      section { padding: 1rem; }
+      pre { font-size: 0.8rem; }
+    }
+    @media print {
+      .topbar, aside, .copy-code { display: none !important; }
+      body { background: white; color: black; font-size: 11pt; }
+      .layout { display: block; width: 100%; margin: 0; }
+      section { break-inside: avoid; box-shadow: none; border-color: #bbb; }
+      details.code-panel > * { display: block !important; }
+      .diagram { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#lesson">Skip to lesson</a>
+
+  <div class="topbar">
+    <div class="brand">EcomSphere · Data Modelling</div>
+    <div class="toolbar" aria-label="Page controls">
+      <button type="button" id="expand-code">Expand all code</button>
+      <button type="button" id="collapse-code">Collapse all code</button>
+      <button type="button" id="theme-toggle" aria-pressed="false">Dark theme</button>
+    </div>
+  </div>
+
+  <header class="hero">
+    <span class="eyebrow">Session 2 · Hands-on MySQL</span>
+    <h1>Normalization Through Problems and Solutions</h1>
+    <p class="lead">Start with difficult-to-use sales data, experience the problems, and improve the design step by step through 1NF, 2NF, 3NF and BCNF.</p>
+    <div class="hero-meta" aria-label="Lesson information">
+      <span class="chip">90 minutes</span>
+      <span class="chip">MySQL 8.0.34</span>
+      <span class="chip">MySQL Workbench</span>
+      <span class="chip">Challenge-first practice</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <nav class="toc" aria-label="Lesson index">
+        <strong>Lesson index</strong>
+        <ol>
+          <li><a href="#journey">The normalization journey</a></li>
+          <li><a href="#setup">Create the starting data</a></li>
+          <li><a href="#first-normal-form">1NF: remove lists and repeating groups</a></li>
+          <li><a href="#second-normal-form">2NF: remove partial dependencies</a></li>
+          <li><a href="#third-normal-form">3NF: remove transitive dependencies</a></li>
+          <li><a href="#bcnf">BCNF: make every determinant a key</a></li>
+          <li><a href="#verification">Verify the complete result</a></li>
+          <li><a href="#comparison">Compare the normal forms</a></li>
+        </ol>
+      </nav>
+    </aside>
+
+    <main id="lesson">
+      <section id="journey">
+        <h2>1. The normalization journey</h2>
+        <p>Normalization separates different business subjects into suitable tables. Each stage fixes a specific kind of dependency problem.</p>
+
+        <div class="journey" aria-label="Normalization progression">
+          <article><strong>1NF</strong><span>One value in each field and no repeating product groups.</span></article>
+          <article><strong>2NF</strong><span>Every non-key field depends on the complete key.</span></article>
+          <article><strong>3NF</strong><span>Non-key fields do not determine other non-key fields.</span></article>
+          <article><strong>BCNF</strong><span>Every determinant is a candidate key.</span></article>
+        </div>
+
+        <div class="note"><strong>Simple working method:</strong> inspect the problem, understand the dependency, redesign the tables, load the data, and verify that the business result remains correct.</div>
+      </section>
+
+      <section id="setup">
+        <h2>2. Create the starting data</h2>
+        <p>The starting table stores multiple products, quantities and prices as comma-separated lists. This makes the first set of problems easy to see.</p>
+
+        <div class="warning"><strong>Reset notice:</strong> the first script deletes only the database named <code>ecomsphere_normalization</code> and recreates it. Do not keep unrelated work in that database.</div>
+
+        <details class="code-panel">
+          <summary>Run 0A — Check MySQL and create the unnormalized table</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT VERSION() AS mysql_version;
+
+DROP DATABASE IF EXISTS ecomsphere_normalization;
+
+CREATE DATABASE ecomsphere_normalization
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+
+USE ecomsphere_normalization;
+
+CREATE TABLE sales_unnormalized
+(
+    order_id              INT PRIMARY KEY,
+    order_date            DATE NOT NULL,
+    customer_id           INT NOT NULL,
+    customer_name         VARCHAR(100) NOT NULL,
+    customer_city         VARCHAR(80) NOT NULL,
+    customer_country      VARCHAR(80) NOT NULL,
+    product_ids           VARCHAR(200) NOT NULL,
+    product_names         VARCHAR(500) NOT NULL,
+    product_quantities    VARCHAR(200) NOT NULL,
+    product_unit_prices   VARCHAR(200) NOT NULL
+) ENGINE = InnoDB;
+
+INSERT INTO sales_unnormalized
+(
+    order_id,
+    order_date,
+    customer_id,
+    customer_name,
+    customer_city,
+    customer_country,
+    product_ids,
+    product_names,
+    product_quantities,
+    product_unit_prices
+)
+VALUES
+(
+    1001, '2026-08-01', 101, 'Aditi Sharma', 'Pune', 'India',
+    '501,502', 'Wireless Mouse,Mechanical Keyboard',
+    '2,1', '799.00,2499.00'
+),
+(
+    1002, '2026-08-02', 102, 'Rohit Verma', 'Mumbai', 'India',
+    '501', 'Wireless Mouse',
+    '1', '799.00'
+),
+(
+    1003, '2026-08-03', 103, 'Maya Johnson', 'Austin', 'United States',
+    '503,504', 'USB-C Dock,HD Webcam',
+    '1,2', '6499.00,3299.00'
+),
+(
+    1004, '2026-08-04', 101, 'Aditi Sharma', 'Pune', 'India',
+    '504', 'HD Webcam',
+    '1', '3299.00'
+);
+
+SELECT *
+FROM sales_unnormalized
+ORDER BY order_id;</code></pre>
+          </div>
+        </details>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Order</th><th>Customer</th><th>Product IDs</th><th>Quantities</th><th>Prices</th></tr></thead>
+            <tbody>
+              <tr><td>1001</td><td>Aditi Sharma</td><td><code>501,502</code></td><td><code>2,1</code></td><td><code>799.00,2499.00</code></td></tr>
+              <tr><td>1002</td><td>Rohit Verma</td><td><code>501</code></td><td><code>1</code></td><td><code>799.00</code></td></tr>
+              <tr><td>1003</td><td>Maya Johnson</td><td><code>503,504</code></td><td><code>1,2</code></td><td><code>6499.00,3299.00</code></td></tr>
+              <tr><td>1004</td><td>Aditi Sharma</td><td><code>504</code></td><td><code>1</code></td><td><code>3299.00</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="first-normal-form">
+        <h2>3. First Normal Form: one value in each field</h2>
+        <p>First inspect what happens when 1NF is not maintained.</p>
+
+        <div class="challenge-grid">
+          <div class="challenge"><strong>Several values in one field</strong><span><code>501,502</code> is a list, not one product ID.</span></div>
+          <div class="challenge"><strong>Lists can lose alignment</strong><span>A missing quantity can connect later quantities to the wrong products.</span></div>
+          <div class="challenge"><strong>Searching becomes awkward</strong><span>A product search requires string functions instead of a normal equality check.</span></div>
+          <div class="challenge"><strong>Totals become difficult</strong><span><code>SUM()</code> cannot directly add values stored inside comma-separated text.</span></div>
+          <div class="challenge"><strong>Normal joins are blocked</strong><span>A list of product IDs cannot use a simple foreign-key relationship.</span></div>
+          <div class="challenge"><strong>Indexing is weak</strong><span>An index cannot efficiently find each value hidden inside a list.</span></div>
+          <div class="challenge"><strong>Constraints are missing</strong><span>A foreign key cannot validate every product ID inside the same field.</span></div>
+          <div class="challenge"><strong>Reports need parsing</strong><span>Every report must first split and match the product, quantity and price lists.</span></div>
+        </div>
+
+        <details class="code-panel">
+          <summary>Run 1A — Experience the awkward product search</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_normalization;
+
+SELECT
+    order_id,
+    product_ids,
+    product_names
+FROM sales_unnormalized
+WHERE FIND_IN_SET('501', product_ids) &gt; 0
+ORDER BY order_id;</code></pre>
+          </div>
+        </details>
+
+        <div class="definition"><strong>1NF:</strong> each field contains one value, repeating groups are removed, and every row can be uniquely identified.</div>
+
+        <h3>1NF ER diagram</h3>
+        <p>Each row now represents one product within one order. The pair <code>(order_id, product_id)</code> identifies the row.</p>
+
+        <div class="note"><strong>Practice assumption:</strong> the same product appears at most once in an order. A production system that permits repeated product lines would normally use an <code>order_item_id</code> or a line number.</div>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 980 440" role="img" aria-labelledby="erd1-title erd1-desc">
+            <title id="erd1-title">First Normal Form sales table</title>
+            <desc id="erd1-desc">A single sales 1NF table with a composite primary key made of order ID and product ID. Each remaining field contains one value.</desc>
+            <rect class="entity" x="260" y="25" width="460" height="385" rx="12"/>
+            <path class="entity-head" d="M272 25h436a12 12 0 0 1 12 12v44H260V37a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="490" y="59" text-anchor="middle">sales_1nf</text>
+            <text class="entity-text pk" x="285" y="108">PK  order_id</text>
+            <text class="entity-text pk" x="285" y="132">PK  product_id</text>
+            <text class="entity-text" x="285" y="166">order_date</text>
+            <text class="entity-text" x="285" y="190">customer_id</text>
+            <text class="entity-text" x="285" y="214">customer_name</text>
+            <text class="entity-text" x="285" y="238">customer_city</text>
+            <text class="entity-text" x="285" y="262">product_name</text>
+            <text class="entity-text" x="285" y="286">category_id</text>
+            <text class="entity-text" x="285" y="310">category_name</text>
+            <text class="entity-text" x="285" y="334">quantity</text>
+            <text class="entity-text" x="285" y="358">unit_price</text>
+            <text class="relation-label" x="490" y="392" text-anchor="middle">One field → one value</text>
+          </svg>
+          <figcaption>1NF removes product lists, but order, customer, product and category details are still repeated.</figcaption>
+        </figure>
+
+        <details class="code-panel">
+          <summary>Run 1B — Create and load the 1NF table</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_normalization;
+
+CREATE TABLE sales_1nf
+(
+    order_id               INT NOT NULL,
+    product_id             INT NOT NULL,
+    order_date             DATE NOT NULL,
+    customer_id            INT NOT NULL,
+    customer_name          VARCHAR(100) NOT NULL,
+    customer_city          VARCHAR(80) NOT NULL,
+    customer_country       VARCHAR(80) NOT NULL,
+    product_name           VARCHAR(150) NOT NULL,
+    category_id            INT NOT NULL,
+    category_name          VARCHAR(100) NOT NULL,
+    category_manager_id    INT NOT NULL,
+    category_manager_name  VARCHAR(100) NOT NULL,
+    quantity               INT NOT NULL,
+    unit_price             DECIMAL(10,2) NOT NULL,
+
+    PRIMARY KEY (order_id, product_id)
+) ENGINE = InnoDB;
+
+INSERT INTO sales_1nf
+(
+    order_id,
+    product_id,
+    order_date,
+    customer_id,
+    customer_name,
+    customer_city,
+    customer_country,
+    product_name,
+    category_id,
+    category_name,
+    category_manager_id,
+    category_manager_name,
+    quantity,
+    unit_price
+)
+VALUES
+(1001, 501, '2026-08-01', 101, 'Aditi Sharma', 'Pune', 'India',
+ 'Wireless Mouse', 301, 'Accessories', 901, 'Neha Iyer', 2, 799.00),
+
+(1001, 502, '2026-08-01', 101, 'Aditi Sharma', 'Pune', 'India',
+ 'Mechanical Keyboard', 301, 'Accessories', 901, 'Neha Iyer', 1, 2499.00),
+
+(1002, 501, '2026-08-02', 102, 'Rohit Verma', 'Mumbai', 'India',
+ 'Wireless Mouse', 301, 'Accessories', 901, 'Neha Iyer', 1, 799.00),
+
+(1003, 503, '2026-08-03', 103, 'Maya Johnson', 'Austin', 'United States',
+ 'USB-C Dock', 302, 'Electronics', 902, 'Daniel Carter', 1, 6499.00),
+
+(1003, 504, '2026-08-03', 103, 'Maya Johnson', 'Austin', 'United States',
+ 'HD Webcam', 302, 'Electronics', 902, 'Daniel Carter', 2, 3299.00),
+
+(1004, 504, '2026-08-04', 101, 'Aditi Sharma', 'Pune', 'India',
+ 'HD Webcam', 302, 'Electronics', 902, 'Daniel Carter', 1, 3299.00);
+
+SELECT *
+FROM sales_1nf
+ORDER BY order_id, product_id;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 1C — Search and aggregate the 1NF rows</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT
+    order_id,
+    product_id,
+    product_name,
+    quantity
+FROM sales_1nf
+WHERE product_id = 501
+ORDER BY order_id;
+
+SELECT
+    product_id,
+    product_name,
+    SUM(quantity) AS quantity_sold,
+    SUM(quantity * unit_price) AS sales_amount
+FROM sales_1nf
+GROUP BY
+    product_id,
+    product_name
+ORDER BY product_id;</code></pre>
+          </div>
+        </details>
+
+        <div class="result"><strong>1NF result:</strong> filtering, aggregation and row identification are easier. The table still repeats order and product descriptions, so it is not yet in 2NF.</div>
+      </section>
+
+      <section id="second-normal-form">
+        <h2>4. Second Normal Form: depend on the complete key</h2>
+        <p>The primary key of <code>sales_1nf</code> is the composite key <code>(order_id, product_id)</code>. A composite key contains more than one column.</p>
+
+        <div class="definition"><strong>Functional dependency:</strong> one value determines another value. For example, one <code>product_id</code> determines one <code>product_name</code>. The value on the left is called the determinant.</div>
+
+        <div class="dependency">order_id → order_date, customer_id<br>product_id → product_name, category_id<br>(order_id, product_id) → quantity, unit_price</div>
+
+        <p><strong>Partial dependency</strong> means that a non-key field depends on only part of a composite key. Here, <code>order_date</code> depends only on <code>order_id</code>, while <code>product_name</code> depends only on <code>product_id</code>.</p>
+
+        <h3>Challenges before 2NF</h3>
+        <div class="challenge-grid">
+          <div class="challenge"><strong>Order details repeat</strong><span>The date and customer are copied for every product in the same order.</span></div>
+          <div class="challenge"><strong>Product details repeat</strong><span>The same product name appears in every order containing that product.</span></div>
+          <div class="challenge"><strong>Update anomaly</strong><span>Updating only one copy can give the same product two different names.</span></div>
+          <div class="challenge"><strong>Insertion anomaly</strong><span>A product cannot be stored until an order also exists.</span></div>
+          <div class="challenge"><strong>Deletion anomaly</strong><span>Deleting the last sale of a product can remove its only description.</span></div>
+          <div class="challenge"><strong>Unnecessary storage</strong><span>Long descriptions are repeated in many transactional rows.</span></div>
+          <div class="challenge"><strong>Large updates</strong><span>One product-name correction may touch thousands of sales rows.</span></div>
+          <div class="challenge"><strong>Quality risk</strong><span>Repeated text can develop different spellings, casing or spacing.</span></div>
+        </div>
+
+        <details class="code-panel">
+          <summary>Run 2A — Observe repetition and a temporary update anomaly</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT
+    order_id,
+    product_id,
+    order_date,
+    customer_id,
+    customer_name
+FROM sales_1nf
+WHERE order_id = 1001
+ORDER BY product_id;
+
+SELECT
+    order_id,
+    product_id,
+    product_name,
+    category_name
+FROM sales_1nf
+WHERE product_id = 501
+ORDER BY order_id;
+
+START TRANSACTION;
+
+UPDATE sales_1nf
+SET product_name = 'Bluetooth Wireless Mouse'
+WHERE order_id = 1001
+  AND product_id = 501;
+
+SELECT
+    order_id,
+    product_id,
+    product_name
+FROM sales_1nf
+WHERE product_id = 501
+ORDER BY order_id;
+
+ROLLBACK;
+
+SELECT
+    order_id,
+    product_id,
+    product_name
+FROM sales_1nf
+WHERE product_id = 501
+ORDER BY order_id;</code></pre>
+          </div>
+        </details>
+
+        <div class="definition"><strong>2NF:</strong> the table is already in 1NF, and every non-key field depends on the complete primary key. Partial dependencies are removed.</div>
+
+        <h3>2NF ER diagram</h3>
+        <p>Order-only fields move to <code>orders_2nf</code>. Product-only fields move to <code>products_2nf</code>. Quantity and transaction price remain in <code>order_item_2nf</code> because they describe one order-product combination.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 1100 500" role="img" aria-labelledby="erd2-title erd2-desc">
+            <title id="erd2-title">Second Normal Form EcomSphere tables</title>
+            <desc id="erd2-desc">Orders and products connect to order items through one-to-many relationships.</desc>
+
+            <rect class="entity" x="55" y="55" width="300" height="270" rx="12"/>
+            <path class="entity-head" d="M67 55h276a12 12 0 0 1 12 12v42H55V67a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="205" y="88" text-anchor="middle">orders_2nf</text>
+            <text class="entity-text pk" x="78" y="136">PK  order_id</text>
+            <text class="entity-text" x="78" y="163">order_date</text>
+            <text class="entity-text" x="78" y="190">customer_id</text>
+            <text class="entity-text" x="78" y="217">customer_name</text>
+            <text class="entity-text" x="78" y="244">customer_city</text>
+            <text class="entity-text" x="78" y="271">customer_country</text>
+
+            <rect class="entity" x="400" y="115" width="300" height="230" rx="12"/>
+            <path class="entity-head" d="M412 115h276a12 12 0 0 1 12 12v42H400v-42a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="550" y="148" text-anchor="middle">order_item_2nf</text>
+            <text class="entity-text pk" x="423" y="196">PK, FK  order_id</text>
+            <text class="entity-text pk" x="423" y="223">PK, FK  product_id</text>
+            <text class="entity-text" x="423" y="260">quantity</text>
+            <text class="entity-text" x="423" y="287">unit_price</text>
+
+            <rect class="entity" x="745" y="35" width="300" height="330" rx="12"/>
+            <path class="entity-head" d="M757 35h276a12 12 0 0 1 12 12v42H745V47a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="895" y="68" text-anchor="middle">products_2nf</text>
+            <text class="entity-text pk" x="768" y="116">PK  product_id</text>
+            <text class="entity-text" x="768" y="143">product_name</text>
+            <text class="entity-text" x="768" y="170">category_id</text>
+            <text class="entity-text" x="768" y="197">category_name</text>
+            <text class="entity-text" x="768" y="224">category_manager_id</text>
+            <text class="entity-text" x="768" y="251">category_manager_name</text>
+
+            <path class="relation" d="M355 205H400"/>
+            <text class="relation-label" x="363" y="190">1</text>
+            <text class="relation-label" x="384" y="190">many</text>
+            <path class="relation" d="M700 225H745"/>
+            <text class="relation-label" x="708" y="210">many</text>
+            <text class="relation-label" x="733" y="210">1</text>
+
+            <text class="relation-label" x="550" y="430" text-anchor="middle">One order has many items · One product can appear in many items</text>
+          </svg>
+          <figcaption>2NF removes partial dependencies. Customer and category dependencies still remain inside the order and product tables.</figcaption>
+        </figure>
+
+        <details class="code-panel">
+          <summary>Run 2B — Create the 2NF tables</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_normalization;
+
+CREATE TABLE orders_2nf
+(
+    order_id          INT PRIMARY KEY,
+    order_date        DATE NOT NULL,
+    customer_id       INT NOT NULL,
+    customer_name     VARCHAR(100) NOT NULL,
+    customer_city     VARCHAR(80) NOT NULL,
+    customer_country  VARCHAR(80) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE products_2nf
+(
+    product_id             INT PRIMARY KEY,
+    product_name           VARCHAR(150) NOT NULL,
+    category_id            INT NOT NULL,
+    category_name          VARCHAR(100) NOT NULL,
+    category_manager_id    INT NOT NULL,
+    category_manager_name  VARCHAR(100) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE order_item_2nf
+(
+    order_id     INT NOT NULL,
+    product_id   INT NOT NULL,
+    quantity     INT NOT NULL,
+    unit_price   DECIMAL(10,2) NOT NULL,
+
+    PRIMARY KEY (order_id, product_id),
+
+    CONSTRAINT fk_order_item_2nf_order
+        FOREIGN KEY (order_id)
+        REFERENCES orders_2nf(order_id),
+
+    CONSTRAINT fk_order_item_2nf_product
+        FOREIGN KEY (product_id)
+        REFERENCES products_2nf(product_id)
+) ENGINE = InnoDB;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 2C — Load and inspect the 2NF tables</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>INSERT INTO orders_2nf
+(
+    order_id,
+    order_date,
+    customer_id,
+    customer_name,
+    customer_city,
+    customer_country
+)
+SELECT DISTINCT
+    order_id,
+    order_date,
+    customer_id,
+    customer_name,
+    customer_city,
+    customer_country
+FROM sales_1nf;
+
+INSERT INTO products_2nf
+(
+    product_id,
+    product_name,
+    category_id,
+    category_name,
+    category_manager_id,
+    category_manager_name
+)
+SELECT DISTINCT
+    product_id,
+    product_name,
+    category_id,
+    category_name,
+    category_manager_id,
+    category_manager_name
+FROM sales_1nf;
+
+INSERT INTO order_item_2nf
+(
+    order_id,
+    product_id,
+    quantity,
+    unit_price
+)
+SELECT
+    order_id,
+    product_id,
+    quantity,
+    unit_price
+FROM sales_1nf;
+
+SELECT * FROM orders_2nf ORDER BY order_id;
+SELECT * FROM products_2nf ORDER BY product_id;
+SELECT * FROM order_item_2nf ORDER BY order_id, product_id;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 2D — Report from the 2NF tables</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT
+    p.product_id,
+    p.product_name,
+    SUM(oi.quantity) AS quantity_sold,
+    SUM(oi.quantity * oi.unit_price) AS sales_amount
+FROM order_item_2nf AS oi
+JOIN products_2nf AS p
+    ON oi.product_id = p.product_id
+GROUP BY
+    p.product_id,
+    p.product_name
+ORDER BY p.product_id;</code></pre>
+          </div>
+        </details>
+
+        <div class="result"><strong>2NF result:</strong> order, product and order-item data now have separate homes. Customer details still depend on <code>customer_id</code>, and category details still depend on <code>category_id</code>.</div>
+      </section>
+
+      <section id="third-normal-form">
+        <h2>5. Third Normal Form: remove indirect dependencies</h2>
+
+        <div class="definition"><strong>Transitive dependency:</strong> a key determines one non-key field, and that non-key field determines another non-key field.</div>
+
+        <div class="dependency">order_id → customer_id → customer_name, customer_city, customer_country<br>product_id → category_id → category_name, category_manager_id<br>category_manager_id → category_manager_name</div>
+
+        <h3>Challenges before 3NF</h3>
+        <div class="challenge-grid">
+          <div class="challenge"><strong>Customer details repeat</strong><span>The same customer information appears in every order.</span></div>
+          <div class="challenge"><strong>Customer update anomaly</strong><span>A city change must be repeated across all of the customer’s orders.</span></div>
+          <div class="challenge"><strong>Customer insertion anomaly</strong><span>A customer cannot be stored until an order exists.</span></div>
+          <div class="challenge"><strong>Customer deletion anomaly</strong><span>Deleting the last order can remove the customer’s only description.</span></div>
+          <div class="challenge"><strong>Category details repeat</strong><span>Each product repeats the category name and manager.</span></div>
+          <div class="challenge"><strong>Category update anomaly</strong><span>Renaming a category requires an update to every product in it.</span></div>
+          <div class="challenge"><strong>Conflicting ownership</strong><span>Products in one category could accidentally show different managers.</span></div>
+          <div class="challenge"><strong>Mixed responsibilities</strong><span>Orders maintain customer data, while products also maintain category and manager data.</span></div>
+        </div>
+
+        <details class="code-panel">
+          <summary>Run 3A — Observe transitive repetition</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT
+    order_id,
+    customer_id,
+    customer_name,
+    customer_city
+FROM orders_2nf
+WHERE customer_id = 101
+ORDER BY order_id;
+
+SELECT
+    product_id,
+    product_name,
+    category_id,
+    category_name,
+    category_manager_name
+FROM products_2nf
+WHERE category_id = 302
+ORDER BY product_id;</code></pre>
+          </div>
+        </details>
+
+        <div class="definition"><strong>3NF:</strong> the table is already in 2NF, and non-key fields do not depend on other non-key fields. Transitive dependencies are removed.</div>
+
+        <h3>3NF ER diagram</h3>
+        <p>Customer, category and category-manager information now have their own tables. Transaction tables keep keys that point to those business subjects.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 1200 780" role="img" aria-labelledby="erd3-title erd3-desc">
+            <title id="erd3-title">Third Normal Form EcomSphere operational model</title>
+            <desc id="erd3-desc">Customers connect to orders, orders connect to order items, products connect to order items, categories connect to products, and category managers connect to categories.</desc>
+
+            <rect class="entity" x="35" y="45" width="270" height="220" rx="12"/>
+            <path class="entity-head" d="M47 45h246a12 12 0 0 1 12 12v42H35V57a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="170" y="78" text-anchor="middle">customers_3nf</text>
+            <text class="entity-text pk" x="57" y="127">PK  customer_id</text>
+            <text class="entity-text" x="57" y="154">customer_name</text>
+            <text class="entity-text" x="57" y="181">customer_city</text>
+            <text class="entity-text" x="57" y="208">customer_country</text>
+
+            <rect class="entity" x="365" y="45" width="270" height="190" rx="12"/>
+            <path class="entity-head" d="M377 45h246a12 12 0 0 1 12 12v42H365V57a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="500" y="78" text-anchor="middle">orders_3nf</text>
+            <text class="entity-text pk" x="387" y="127">PK  order_id</text>
+            <text class="entity-text" x="387" y="154">order_date</text>
+            <text class="entity-text fk" x="387" y="181">FK  customer_id</text>
+
+            <rect class="entity" x="695" y="45" width="270" height="215" rx="12"/>
+            <path class="entity-head" d="M707 45h246a12 12 0 0 1 12 12v42H695V57a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="830" y="78" text-anchor="middle">order_item_3nf</text>
+            <text class="entity-text pk" x="717" y="127">PK, FK  order_id</text>
+            <text class="entity-text pk" x="717" y="154">PK, FK  product_id</text>
+            <text class="entity-text" x="717" y="191">quantity</text>
+            <text class="entity-text" x="717" y="218">unit_price</text>
+
+            <rect class="entity" x="895" y="465" width="270" height="190" rx="12"/>
+            <path class="entity-head" d="M907 465h246a12 12 0 0 1 12 12v42H895v-42a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="1030" y="498" text-anchor="middle">products_3nf</text>
+            <text class="entity-text pk" x="917" y="547">PK  product_id</text>
+            <text class="entity-text" x="917" y="574">product_name</text>
+            <text class="entity-text fk" x="917" y="601">FK  category_id</text>
+
+            <rect class="entity" x="505" y="465" width="280" height="190" rx="12"/>
+            <path class="entity-head" d="M517 465h256a12 12 0 0 1 12 12v42H505v-42a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="645" y="498" text-anchor="middle">categories_3nf</text>
+            <text class="entity-text pk" x="527" y="547">PK  category_id</text>
+            <text class="entity-text" x="527" y="574">category_name</text>
+            <text class="entity-text fk" x="527" y="601">FK  category_manager_id</text>
+
+            <rect class="entity" x="95" y="465" width="300" height="165" rx="12"/>
+            <path class="entity-head" d="M107 465h276a12 12 0 0 1 12 12v42H95v-42a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="245" y="498" text-anchor="middle">category_managers_3nf</text>
+            <text class="entity-text pk" x="117" y="547">PK  category_manager_id</text>
+            <text class="entity-text" x="117" y="574">category_manager_name</text>
+
+            <path class="relation" d="M305 155H365"/>
+            <text class="relation-label" x="315" y="140">1</text>
+            <text class="relation-label" x="340" y="140">many</text>
+            <path class="relation" d="M635 155H695"/>
+            <text class="relation-label" x="645" y="140">1</text>
+            <text class="relation-label" x="670" y="140">many</text>
+            <path class="relation" d="M830 260V375H1030V465"/>
+            <text class="relation-label" x="846" y="287">many</text>
+            <text class="relation-label" x="1038" y="449">1</text>
+            <path class="relation" d="M895 560H785"/>
+            <text class="relation-label" x="868" y="545">many</text>
+            <text class="relation-label" x="790" y="545">1</text>
+            <path class="relation" d="M505 560H395"/>
+            <text class="relation-label" x="478" y="545">many</text>
+            <text class="relation-label" x="400" y="545">1</text>
+
+            <text class="relation-label" x="600" y="720" text-anchor="middle">Each business subject is maintained in one suitable table</text>
+          </svg>
+          <figcaption>The 3NF model reduces update, insertion and deletion anomalies in the operational database.</figcaption>
+        </figure>
+
+        <details class="code-panel">
+          <summary>Run 3B — Create the 3NF tables</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_normalization;
+
+CREATE TABLE customers_3nf
+(
+    customer_id       INT PRIMARY KEY,
+    customer_name     VARCHAR(100) NOT NULL,
+    customer_city     VARCHAR(80) NOT NULL,
+    customer_country  VARCHAR(80) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE category_managers_3nf
+(
+    category_manager_id    INT PRIMARY KEY,
+    category_manager_name  VARCHAR(100) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE categories_3nf
+(
+    category_id          INT PRIMARY KEY,
+    category_name        VARCHAR(100) NOT NULL,
+    category_manager_id  INT NOT NULL,
+
+    CONSTRAINT fk_category_3nf_manager
+        FOREIGN KEY (category_manager_id)
+        REFERENCES category_managers_3nf(category_manager_id)
+) ENGINE = InnoDB;
+
+CREATE TABLE products_3nf
+(
+    product_id    INT PRIMARY KEY,
+    product_name  VARCHAR(150) NOT NULL,
+    category_id   INT NOT NULL,
+
+    CONSTRAINT fk_product_3nf_category
+        FOREIGN KEY (category_id)
+        REFERENCES categories_3nf(category_id)
+) ENGINE = InnoDB;
+
+CREATE TABLE orders_3nf
+(
+    order_id     INT PRIMARY KEY,
+    order_date   DATE NOT NULL,
+    customer_id  INT NOT NULL,
+
+    CONSTRAINT fk_order_3nf_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers_3nf(customer_id)
+) ENGINE = InnoDB;
+
+CREATE TABLE order_item_3nf
+(
+    order_id     INT NOT NULL,
+    product_id   INT NOT NULL,
+    quantity     INT NOT NULL,
+    unit_price   DECIMAL(10,2) NOT NULL,
+
+    PRIMARY KEY (order_id, product_id),
+
+    CONSTRAINT fk_order_item_3nf_order
+        FOREIGN KEY (order_id)
+        REFERENCES orders_3nf(order_id),
+
+    CONSTRAINT fk_order_item_3nf_product
+        FOREIGN KEY (product_id)
+        REFERENCES products_3nf(product_id)
+) ENGINE = InnoDB;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 3C — Load the 3NF tables in dependency order</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>INSERT INTO customers_3nf
+(
+    customer_id,
+    customer_name,
+    customer_city,
+    customer_country
+)
+SELECT DISTINCT
+    customer_id,
+    customer_name,
+    customer_city,
+    customer_country
+FROM orders_2nf;
+
+INSERT INTO category_managers_3nf
+(
+    category_manager_id,
+    category_manager_name
+)
+SELECT DISTINCT
+    category_manager_id,
+    category_manager_name
+FROM products_2nf;
+
+INSERT INTO categories_3nf
+(
+    category_id,
+    category_name,
+    category_manager_id
+)
+SELECT DISTINCT
+    category_id,
+    category_name,
+    category_manager_id
+FROM products_2nf;
+
+INSERT INTO products_3nf
+(
+    product_id,
+    product_name,
+    category_id
+)
+SELECT
+    product_id,
+    product_name,
+    category_id
+FROM products_2nf;
+
+INSERT INTO orders_3nf
+(
+    order_id,
+    order_date,
+    customer_id
+)
+SELECT
+    order_id,
+    order_date,
+    customer_id
+FROM orders_2nf;
+
+INSERT INTO order_item_3nf
+(
+    order_id,
+    product_id,
+    quantity,
+    unit_price
+)
+SELECT
+    order_id,
+    product_id,
+    quantity,
+    unit_price
+FROM order_item_2nf;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 3D — Inspect the tables and run a business report</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT * FROM customers_3nf ORDER BY customer_id;
+SELECT * FROM category_managers_3nf ORDER BY category_manager_id;
+SELECT * FROM categories_3nf ORDER BY category_id;
+SELECT * FROM products_3nf ORDER BY product_id;
+SELECT * FROM orders_3nf ORDER BY order_id;
+SELECT * FROM order_item_3nf ORDER BY order_id, product_id;
+
+SELECT
+    c.customer_name,
+    p.product_name,
+    cat.category_name,
+    SUM(oi.quantity) AS quantity_sold,
+    SUM(oi.quantity * oi.unit_price) AS sales_amount
+FROM order_item_3nf AS oi
+JOIN orders_3nf AS o
+    ON oi.order_id = o.order_id
+JOIN customers_3nf AS c
+    ON o.customer_id = c.customer_id
+JOIN products_3nf AS p
+    ON oi.product_id = p.product_id
+JOIN categories_3nf AS cat
+    ON p.category_id = cat.category_id
+GROUP BY
+    c.customer_name,
+    p.product_name,
+    cat.category_name
+ORDER BY
+    c.customer_name,
+    p.product_name;</code></pre>
+          </div>
+        </details>
+
+        <div class="result"><strong>3NF result:</strong> customer, order, product, category and manager data can now be maintained independently. Operational updates are safer, although analytical reports require more joins.</div>
+      </section>
+
+      <section id="bcnf">
+        <h2>6. BCNF: every determinant must be a candidate key</h2>
+        <p>Most practical operational designs stop at 3NF. BCNF handles a smaller set of dependency problems that may remain when a table has more than one candidate key.</p>
+
+        <div class="definition"><strong>Candidate key:</strong> a minimal field or field combination that can uniquely identify a row.</div>
+
+        <p>Consider a course-allocation table with these rules:</p>
+        <ul>
+          <li>A student can attend many courses.</li>
+          <li>Each instructor teaches exactly one course.</li>
+          <li>A course can have multiple instructors.</li>
+          <li>A student has one instructor for a selected course.</li>
+        </ul>
+
+        <div class="dependency">(student_id, course_id) → instructor_id<br>(student_id, instructor_id) → course_id<br>instructor_id → course_id</div>
+
+        <p>The first two combinations are candidate keys. Every field participates in a candidate key, so this example can satisfy 3NF. It still violates BCNF because <code>instructor_id</code> determines <code>course_id</code> but is not a candidate key for the complete table.</p>
+
+        <h3>Challenges before BCNF</h3>
+        <div class="challenge-grid">
+          <div class="challenge"><strong>Course assignment repeats</strong><span>An instructor’s course is copied for every student.</span></div>
+          <div class="challenge"><strong>Update anomaly</strong><span>Updating only one row can show the same instructor teaching different courses.</span></div>
+          <div class="challenge"><strong>Insertion anomaly</strong><span>An instructor cannot receive a course until a student exists.</span></div>
+          <div class="challenge"><strong>Deletion anomaly</strong><span>Deleting the last student can remove the instructor’s course assignment.</span></div>
+          <div class="challenge"><strong>Hidden determinant</strong><span><code>instructor_id</code> determines <code>course_id</code> but does not identify a complete row.</span></div>
+          <div class="challenge"><strong>Difficult enforcement</strong><span>The original structure does not directly enforce one course per instructor.</span></div>
+        </div>
+
+        <details class="code-panel">
+          <summary>Run 4A — Create the 3NF course allocation and expose the problem</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_normalization;
+
+CREATE TABLE course_assignment_3nf
+(
+    student_id     INT NOT NULL,
+    course_id      VARCHAR(50) NOT NULL,
+    instructor_id  INT NOT NULL,
+
+    PRIMARY KEY (student_id, course_id),
+
+    CONSTRAINT uq_student_instructor
+        UNIQUE (student_id, instructor_id)
+) ENGINE = InnoDB;
+
+INSERT INTO course_assignment_3nf
+(
+    student_id,
+    course_id,
+    instructor_id
+)
+VALUES
+    (1, 'SQL', 10),
+    (1, 'PYTHON', 20),
+    (2, 'SQL', 10),
+    (2, 'PYTHON', 20),
+    (3, 'SQL', 30);
+
+SELECT *
+FROM course_assignment_3nf
+ORDER BY student_id, course_id;
+
+START TRANSACTION;
+
+UPDATE course_assignment_3nf
+SET course_id = 'DATA_MODELLING'
+WHERE student_id = 1
+  AND instructor_id = 10;
+
+SELECT
+    instructor_id,
+    COUNT(DISTINCT course_id) AS number_of_courses
+FROM course_assignment_3nf
+GROUP BY instructor_id
+HAVING COUNT(DISTINCT course_id) &gt; 1;
+
+ROLLBACK;</code></pre>
+          </div>
+        </details>
+
+        <div class="definition"><strong>BCNF:</strong> every determinant must be a candidate key. Here, <code>instructor_id</code> determines <code>course_id</code>, so that relationship needs its own table.</div>
+
+        <h3>BCNF ER diagram</h3>
+        <p>The instructor-course relationship is stored once. Student allocation refers to the instructor.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 1000 430" role="img" aria-labelledby="erdb-title erdb-desc">
+            <title id="erdb-title">BCNF course allocation model</title>
+            <desc id="erdb-desc">Instructor course has one row per instructor and connects to many student instructor rows.</desc>
+
+            <rect class="entity" x="90" y="90" width="330" height="190" rx="12"/>
+            <path class="entity-head" d="M102 90h306a12 12 0 0 1 12 12v44H90v-44a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="255" y="124" text-anchor="middle">instructor_course_bcnf</text>
+            <text class="entity-text pk" x="115" y="175">PK  instructor_id</text>
+            <text class="entity-text" x="115" y="207">course_id</text>
+
+            <rect class="entity" x="580" y="90" width="330" height="190" rx="12"/>
+            <path class="entity-head" d="M592 90h306a12 12 0 0 1 12 12v44H580v-44a12 12 0 0 1 12-12z"/>
+            <text class="entity-title" x="745" y="124" text-anchor="middle">student_instructor_bcnf</text>
+            <text class="entity-text pk" x="605" y="175">PK  student_id</text>
+            <text class="entity-text pk" x="605" y="207">PK, FK  instructor_id</text>
+
+            <path class="relation" d="M420 190H580"/>
+            <text class="relation-label" x="438" y="174">1</text>
+            <text class="relation-label" x="532" y="174">many</text>
+            <text class="relation-label" x="500" y="332" text-anchor="middle">One instructor-course assignment can serve many students</text>
+          </svg>
+          <figcaption>The determinant <code>instructor_id</code> is now the key of its own table.</figcaption>
+        </figure>
+
+        <details class="code-panel">
+          <summary>Run 4B — Create and load the BCNF tables</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>CREATE TABLE instructor_course_bcnf
+(
+    instructor_id  INT PRIMARY KEY,
+    course_id      VARCHAR(50) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE student_instructor_bcnf
+(
+    student_id     INT NOT NULL,
+    instructor_id  INT NOT NULL,
+
+    PRIMARY KEY (student_id, instructor_id),
+
+    CONSTRAINT fk_student_instructor_bcnf
+        FOREIGN KEY (instructor_id)
+        REFERENCES instructor_course_bcnf(instructor_id)
+) ENGINE = InnoDB;
+
+INSERT INTO instructor_course_bcnf
+(
+    instructor_id,
+    course_id
+)
+SELECT DISTINCT
+    instructor_id,
+    course_id
+FROM course_assignment_3nf;
+
+INSERT INTO student_instructor_bcnf
+(
+    student_id,
+    instructor_id
+)
+SELECT DISTINCT
+    student_id,
+    instructor_id
+FROM course_assignment_3nf;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 4C — Reconstruct and validate the course allocation</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT
+    si.student_id,
+    ic.course_id,
+    si.instructor_id
+FROM student_instructor_bcnf AS si
+JOIN instructor_course_bcnf AS ic
+    ON si.instructor_id = ic.instructor_id
+ORDER BY
+    si.student_id,
+    ic.course_id;
+
+SELECT
+    instructor_id,
+    COUNT(*) AS course_rows
+FROM instructor_course_bcnf
+GROUP BY instructor_id
+HAVING COUNT(*) &gt; 1;</code></pre>
+          </div>
+        </details>
+
+        <div class="result"><strong>BCNF result:</strong> the instructor’s course is stored once, can be updated once, and remains available even when no student allocation exists.</div>
+      </section>
+
+      <section id="verification">
+        <h2>7. Verify the complete result</h2>
+        <p>Normalization should change the structure without changing the valid sales total.</p>
+
+        <details class="code-panel">
+          <summary>Run 5A — Compare totals, counts and foreign-key matches</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_normalization;
+
+SELECT
+    ROUND(SUM(quantity * unit_price), 2) AS sales_1nf_total
+FROM sales_1nf;
+
+SELECT
+    ROUND(SUM(quantity * unit_price), 2) AS sales_3nf_total
+FROM order_item_3nf;
+
+SELECT 'customers_3nf' AS table_name, COUNT(*) AS row_count
+FROM customers_3nf
+
+UNION ALL
+
+SELECT 'categories_3nf', COUNT(*)
+FROM categories_3nf
+
+UNION ALL
+
+SELECT 'products_3nf', COUNT(*)
+FROM products_3nf
+
+UNION ALL
+
+SELECT 'orders_3nf', COUNT(*)
+FROM orders_3nf
+
+UNION ALL
+
+SELECT 'order_item_3nf', COUNT(*)
+FROM order_item_3nf;
+
+SELECT COUNT(*) AS missing_dimension_references
+FROM order_item_3nf AS oi
+LEFT JOIN orders_3nf AS o
+    ON oi.order_id = o.order_id
+LEFT JOIN products_3nf AS p
+    ON oi.product_id = p.product_id
+WHERE o.order_id IS NULL
+   OR p.product_id IS NULL;</code></pre>
+          </div>
+        </details>
+
+        <h3>Expected verification</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Check</th><th>Expected result</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td>1NF sales total</td><td><code>21292.00</code></td><td>The total calculated before decomposition.</td></tr>
+              <tr><td>3NF sales total</td><td><code>21292.00</code></td><td>The normalized structure preserves the business value.</td></tr>
+              <tr><td><code>customers_3nf</code></td><td><code>3</code> rows</td><td>One row per customer.</td></tr>
+              <tr><td><code>categories_3nf</code></td><td><code>2</code> rows</td><td>One row per category.</td></tr>
+              <tr><td><code>products_3nf</code></td><td><code>4</code> rows</td><td>One row per product.</td></tr>
+              <tr><td><code>orders_3nf</code></td><td><code>4</code> rows</td><td>One row per order.</td></tr>
+              <tr><td><code>order_item_3nf</code></td><td><code>6</code> rows</td><td>One row per order-product combination.</td></tr>
+              <tr><td>Missing references</td><td><code>0</code></td><td>Every order item finds its order and product.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Workbench ER diagram</h3>
+        <ol>
+          <li>Select <strong>Database → Reverse Engineer</strong>.</li>
+          <li>Choose the local MySQL connection.</li>
+          <li>Select <code>ecomsphere_normalization</code>.</li>
+          <li>Select the six tables ending in <code>_3nf</code>.</li>
+          <li>Keep <strong>Place imported objects on a diagram</strong> selected.</li>
+          <li>Finish the wizard and arrange the tables around <code>order_item_3nf</code>.</li>
+        </ol>
+      </section>
+
+      <section id="comparison">
+        <h2>8. Compare the normal forms</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Normal form</th><th>Main challenge</th><th>Design response</th></tr></thead>
+            <tbody>
+              <tr><td><strong>1NF</strong></td><td>Lists, repeating groups and several values in one field</td><td>Create one row per business occurrence.</td></tr>
+              <tr><td><strong>2NF</strong></td><td>A field depends on only part of a composite key</td><td>Separate order, product and order-item data.</td></tr>
+              <tr><td><strong>3NF</strong></td><td>A non-key field depends on another non-key field</td><td>Separate customer, category and manager data.</td></tr>
+              <tr><td><strong>BCNF</strong></td><td>A determinant is not a candidate key</td><td>Move the determining relationship into its own table.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Final checkpoint</h3>
+        <ul class="checklist">
+          <li>Every field in the 1NF table contains one value.</li>
+          <li>Partial dependencies are removed in 2NF.</li>
+          <li>Transitive dependencies are removed in 3NF.</li>
+          <li>Every determinant is a key in the BCNF tables.</li>
+          <li>Sales totals match before and after normalization.</li>
+          <li>The final 3NF model protects operational data but needs several joins for reporting.</li>
+        </ul>
+
+        <div class="note"><strong>Next connection:</strong> the normalized model is safe for operational updates. The next session will reorganize the same business data into facts and dimensions so Gold-layer reports need fewer, simpler joins.</div>
+      </section>
+    </main>
+  </div>
+
+  <footer>EcomSphere · Session 2 · Normalization with MySQL</footer>
+
+  <script>
+    const codePanels = Array.from(document.querySelectorAll('details.code-panel'));
+
+    document.getElementById('expand-code').addEventListener('click', () => {
+      codePanels.forEach((panel) => { panel.open = true; });
+    });
+
+    document.getElementById('collapse-code').addEventListener('click', () => {
+      codePanels.forEach((panel) => { panel.open = false; });
+    });
+
+    document.querySelectorAll('.copy-code').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const code = button.closest('.code-wrap').querySelector('code').innerText;
+        const original = button.textContent;
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(code);
+          } else {
+            const helper = document.createElement('textarea');
+            helper.value = code;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'fixed';
+            helper.style.opacity = '0';
+            document.body.appendChild(helper);
+            helper.select();
+            document.execCommand('copy');
+            helper.remove();
+          }
+          button.textContent = 'Copied';
+        } catch (error) {
+          button.textContent = 'Copy failed';
+        }
+        setTimeout(() => { button.textContent = original; }, 1600);
+      });
+    });
+
+    const themeButton = document.getElementById('theme-toggle');
+    themeButton.addEventListener('click', () => {
+      const isDark = document.documentElement.dataset.theme === 'dark';
+      document.documentElement.dataset.theme = isDark ? 'light' : 'dark';
+      themeButton.textContent = isDark ? 'Dark theme' : 'Light theme';
+      themeButton.setAttribute('aria-pressed', String(!isDark));
+    });
+  </script>
+</body>
+</html>

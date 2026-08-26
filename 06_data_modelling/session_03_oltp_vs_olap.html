@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hands-On Lab: Challenges of OLTP & The STAR Schema Solution</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral', er: { useMaxWidth: true, entityPadding: 15 } });
+  </script>
+  <style>
+    :root {
+      --bg-main: #f8fafc;
+      --card-bg: #ffffff;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 24px;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    header {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      color: #ffffff;
+      padding: 32px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+    }
+    header h1 { font-size: 26px; margin-bottom: 8px; }
+    header p { color: #94a3b8; font-size: 15px; }
+    .section {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .section h2 {
+      font-size: 20px;
+      color: var(--text-main);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 999px;
+      background-color: #dbeafe;
+      color: var(--primary);
+    }
+    .bullet-list { list-style-type: none; margin: 12px 0; }
+    .bullet-list li {
+      position: relative;
+      padding-left: 20px;
+      margin-bottom: 8px;
+      font-size: 14.5px;
+    }
+    .bullet-list li::before {
+      content: "•";
+      position: absolute;
+      left: 6px;
+      color: var(--primary);
+      font-weight: bold;
+    }
+    .diagram-container {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+      text-align: center;
+      overflow-x: auto;
+    }
+    .code-container {
+      position: relative;
+      margin-top: 14px;
+      margin-bottom: 14px;
+      border-radius: 8px;
+      overflow: hidden;
+      background-color: var(--code-bg);
+    }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #1e293b;
+      padding: 8px 14px;
+      font-size: 12px;
+      color: #94a3b8;
+      font-family: monospace;
+      font-weight: 600;
+    }
+    .copy-btn {
+      background-color: var(--primary);
+      color: #ffffff;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .copy-btn:hover { background-color: var(--primary-dark); }
+    .copy-btn.copied { background-color: var(--accent-green); }
+    pre {
+      padding: 16px;
+      overflow-x: auto;
+      font-family: "Fira Code", Consolas, Monaco, "Courier New", monospace;
+      font-size: 13.5px;
+      color: var(--code-text);
+      line-height: 1.5;
+    }
+    .callout {
+      background-color: #eff6ff;
+      border-left: 4px solid var(--primary);
+      padding: 12px 16px;
+      border-radius: 0 6px 6px 0;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    .callout-warning {
+      background-color: #fffbeb;
+      border-left-color: var(--accent-amber);
+    }
+    .scenario-card {
+      background: #fdfefe;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid var(--accent-red);
+      border-radius: 6px;
+      padding: 14px;
+      margin-top: 12px;
+      margin-bottom: 12px;
+    }
+    .scenario-card.solution {
+      border-left-color: var(--accent-green);
+    }
+    .scenario-title {
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .grid-box {
+      background: #f1f5f9;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .grid-box h4 { margin-bottom: 8px; font-size: 15px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      text-align: left;
+      margin-top: 16px;
+    }
+    th, td {
+      padding: 12px 14px;
+      border: 1px solid var(--border-color);
+    }
+    th { background-color: #f1f5f9; font-weight: 600; }
+    tr:nth-child(even) { background-color: #fafbfc; }
+    @media (max-width: 768px) { .comparison-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <h1>Hands-On Lab: OLTP Challenges & STAR Schema Solutions</h1>
+    <p>A practical, scenario-driven guide to dimensional modeling and data warehouse design with MySQL 8.</p>
+  </header>
+
+  <!-- Module 1: The Challenges of OLTP -->
+  <div class="section">
+    <h2><span class="badge" style="background-color: #fee2e2; color: #b91c1c;">Part 1</span> The Analytics Problem: Challenges of OLTP</h2>
+    <p>OLTP (Online Transaction Processing) systems use <strong>normalized tables</strong> to prevent data duplication and ensure lightning-fast writes (e.g., checkout systems). However, when we try to run analytics on these systems, major challenges emerge.</p>
+    
+    <div class="diagram-container">
+      <pre class="mermaid">
+erDiagram
+    CUSTOMERS ||--o{ ORDERS : places
+    CATEGORIES ||--o{ PRODUCTS : contains
+    PRODUCTS ||--o{ ORDER_ITEMS : includes
+    ORDERS ||--o{ ORDER_ITEMS : contains
+
+    CUSTOMERS { int customer_id PK string city }
+    CATEGORIES { int category_id PK string category_name }
+    PRODUCTS { int product_id PK int category_id FK decimal unit_price }
+    ORDERS { int order_id PK int customer_id FK date order_date }
+    ORDER_ITEMS { int item_id PK int order_id FK int product_id FK decimal item_price }
+      </pre>
+    </div>
+
+    <div class="code-container">
+      <div class="code-header">
+        <span>SQL: Base Setup for OLTP Environment</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><code>-- 1. Create OLTP Database
+CREATE DATABASE IF NOT EXISTS ecommerce_oltp;
+USE ecommerce_oltp;
+
+-- 2. Create Normalized 3NF Tables
+CREATE TABLE customers (customer_id INT AUTO_INCREMENT PRIMARY KEY, first_name VARCHAR(50), city VARCHAR(50));
+CREATE TABLE categories (category_id INT AUTO_INCREMENT PRIMARY KEY, category_name VARCHAR(50));
+CREATE TABLE products (product_id INT AUTO_INCREMENT PRIMARY KEY, product_name VARCHAR(100), category_id INT, unit_price DECIMAL(10,2));
+CREATE TABLE orders (order_id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT, order_date DATE);
+CREATE TABLE order_items (item_id INT AUTO_INCREMENT PRIMARY KEY, order_id INT, product_id INT, quantity INT, item_price DECIMAL(10,2));
+
+-- 3. Insert Historical Sample Data (2024 Sales)
+INSERT INTO customers (first_name, city) VALUES ('John', 'New York'), ('Alice', 'Chicago');
+INSERT INTO categories (category_name) VALUES ('Electronics'), ('Home Goods');
+INSERT INTO products (product_name, category_id, unit_price) VALUES ('Laptop', 1, 1200.00), ('Desk Lamp', 2, 45.00);
+INSERT INTO orders (customer_id, order_date) VALUES (1, '2024-03-01'), (2, '2024-03-02');
+INSERT INTO order_items (order_id, product_id, quantity, item_price) VALUES (1, 1, 1, 1200.00), (1, 2, 2, 45.00), (2, 2, 1, 45.00);</code></pre>
+    </div>
+
+    <!-- Challenge 1: Query Complexity -->
+    <div class="scenario-card">
+      <div class="scenario-title">Challenge 1: Query Complexity & Performance (The Join Maze)</div>
+      <p><strong>Scenario:</strong> The business wants a simple report: <em>"Show me total revenue grouped by product category and customer city."</em> Because data is split across 5 tables, we must execute a massive JOIN operation. In a real database with millions of rows, this causes heavy CPU load and slows down active transactions.</p>
+    </div>
+
+    <div class="code-container">
+      <div class="code-header">
+        <span>SQL: Calculate Total Revenue by Category and City (OLTP)</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><code>-- This simple business question requires 5 tables to be joined!
+SELECT 
+    c.city,
+    cat.category_name,
+    SUM(oi.quantity * oi.item_price) AS total_revenue
+FROM customers c
+JOIN orders o ON c.customer_id = o.customer_id
+JOIN order_items oi ON o.order_id = oi.order_id
+JOIN products p ON oi.product_id = p.product_id
+JOIN categories cat ON p.category_id = cat.category_id
+GROUP BY c.city, cat.category_name;</code></pre>
+    </div>
+
+    <!-- Challenge 2: Historical Data Loss -->
+    <div class="scenario-card">
+      <div class="scenario-title">Challenge 2: Historical Data Accuracy (The Overwrite Problem)</div>
+      <p><strong>Scenario:</strong> Today (in 2026), John moves from New York to Chicago. He logs into the website and updates his profile. Because OLTP systems overwrite data in place to save space, John's city is permanently changed. If we run our 2024 revenue report again, John's 2024 purchase will falsely show up as "Chicago" revenue, completely ruining our historical accuracy.</p>
+    </div>
+
+    <div class="code-container">
+      <div class="code-header">
+        <span>SQL: Customer Relocates - The Overwrite Problem</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><code>-- John updates his profile today
+UPDATE customers 
+SET city = 'Chicago' 
+WHERE customer_id = 1;
+
+-- If you re-run the previous SELECT query, New York's 2024 revenue is gone!
+-- It has been historically rewritten to Chicago.</code></pre>
+    </div>
+
+  </div>
+
+  <!-- Module 2: The STAR Schema Solution -->
+  <div class="section">
+    <h2><span class="badge" style="background-color: #dcfce7; color: #166534;">Part 2</span> The Analytics Solution: STAR Schema</h2>
+    <p>We resolve these challenges by extracting the data into a Data Warehouse using a <strong>Dimensional Model (STAR Schema)</strong>. We denormalize the tables (intentionally duplicating descriptions) to create a central Fact table surrounded by Contextual Dimensions.</p>
+
+    <div class="diagram-container">
+      <pre class="mermaid">
+erDiagram
+    DIM_CUSTOMER ||--o{ FACT_SALES : filters
+    DIM_PRODUCT ||--o{ FACT_SALES : filters
+    DIM_DATE ||--o{ FACT_SALES : filters
+
+    DIM_CUSTOMER { int customer_key PK string full_name string city }
+    DIM_PRODUCT { int product_key PK string product_name string category_name }
+    DIM_DATE { int date_key PK date full_date string year }
+    FACT_SALES { int sales_id PK int customer_key FK int product_key FK int quantity_sold decimal sales_amount }
+      </pre>
+    </div>
+
+    <div class="code-container">
+      <div class="code-header">
+        <span>SQL: Base Setup for STAR Schema Environment</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><code>-- 1. Create Data Warehouse Database
+CREATE DATABASE IF NOT EXISTS ecommerce_dw;
+USE ecommerce_dw;
+
+-- 2. Create Denormalized Dimensions
+CREATE TABLE dim_customer (customer_key INT AUTO_INCREMENT PRIMARY KEY, customer_id_source INT, full_name VARCHAR(100), city VARCHAR(50));
+CREATE TABLE dim_product (product_key INT AUTO_INCREMENT PRIMARY KEY, product_id_source INT, product_name VARCHAR(100), category_name VARCHAR(50));
+CREATE TABLE dim_date (date_key INT PRIMARY KEY, full_date DATE, year INT);
+
+-- 3. Create Fact Table
+CREATE TABLE fact_sales (
+    sales_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_key INT, product_key INT, date_key INT,
+    quantity_sold INT, sales_amount DECIMAL(10, 2)
+);
+
+-- 4. Load Data (Simulating an ETL Pipeline)
+INSERT INTO dim_customer (customer_id_source, full_name, city) VALUES (1, 'John Doe', 'New York'), (2, 'Alice Smith', 'Chicago');
+INSERT INTO dim_product (product_id_source, product_name, category_name) VALUES (1, 'Laptop', 'Electronics'), (2, 'Desk Lamp', 'Home Goods');
+INSERT INTO dim_date (date_key, full_date, year) VALUES (20240301, '2024-03-01', 2024), (20240302, '2024-03-02', 2024);
+
+-- Fact table pre-calculates the sales_amount (quantity * price)
+INSERT INTO fact_sales (customer_key, product_key, date_key, quantity_sold, sales_amount) VALUES 
+(1, 1, 20240301, 1, 1200.00), 
+(1, 2, 20240301, 2, 90.00), 
+(2, 2, 20240302, 1, 45.00);</code></pre>
+    </div>
+
+    <!-- Resolution 1: Query Complexity -->
+    <div class="scenario-card solution">
+      <div class="scenario-title">Resolution 1: Dramatically Simplified Queries</div>
+      <p>Because the category name is pre-packed into <code>dim_product</code>, and the sales amount is pre-calculated in <code>fact_sales</code>, the query to get "Revenue by Category and City" is drastically faster. It requires joining only 2 dimension tables to the central fact table.</p>
+    </div>
+
+    <div class="code-container">
+      <div class="code-header">
+        <span>SQL: Calculate Total Revenue (Simplified STAR Query)</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><code>-- The exact same business question now only takes 2 direct joins
+SELECT 
+    c.city,
+    p.category_name,
+    SUM(f.sales_amount) AS total_revenue
+FROM fact_sales f
+JOIN dim_customer c ON f.customer_key = c.customer_key
+JOIN dim_product p ON f.product_key = p.product_key
+GROUP BY c.city, p.category_name;</code></pre>
+    </div>
+
+    <!-- Resolution 2: Historical Accuracy -->
+    <div class="scenario-card solution">
+      <div class="scenario-title">Resolution 2: Preserving History (Slowly Changing Dimensions)</div>
+      <p>How does the STAR schema handle John moving to Chicago? Instead of overwriting the New York record, the Data Warehouse uses a technique called <strong>Slowly Changing Dimensions (SCD Type 2)</strong>. It inserts a brand new row for John with the city 'Chicago'. All of his old 2024 facts stay permanently linked to the 'New York' customer key, ensuring historical reporting remains 100% accurate.</p>
+    </div>
+
+  </div>
+
+  <!-- Module 3: Grain Selection -->
+  <div class="section">
+    <h2><span class="badge">Part 3</span> The Golden Rule: Choosing the Appropriate Grain</h2>
+    <p>Before you build a STAR schema, you must define the <strong>Grain</strong>. The grain defines exactly what a single row in your Fact table represents. You should always choose the grain based on your deepest analytical requirement.</p>
+
+    <div class="comparison-grid">
+      <div class="grid-box">
+        <h4>Option A: Order-Level Grain</h4>
+        <ul class="bullet-list">
+          <li><strong>Definition:</strong> 1 Row = 1 Completed Order.</li>
+          <li><strong>Analytical Limitation:</strong> If you use this grain, you know the total order cost, but you <em>cannot</em> analyze which specific products or categories were sold.</li>
+        </ul>
+      </div>
+      <div class="grid-box">
+        <h4>Option B: Line-Item Grain (Best Practice)</h4>
+        <ul class="bullet-list">
+          <li><strong>Definition:</strong> 1 Row = 1 Product Line-Item inside an Order.</li>
+          <li><strong>Analytical Power:</strong> This is the lowest <strong>atomic grain</strong>. You can analyze sales by product, by category, and easily aggregate upward to see total order costs.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout callout-warning">
+      <strong>Rule of Thumb:</strong> You can always roll up low-grain data to summarize it. You can <em>never</em> drill down into coarse-grain data to split it apart. Always build at the lowest atomic level.
+    </div>
+  </div>
+
+  <!-- Module 4: Multiple Fact Tables -->
+  <div class="section">
+    <h2><span class="badge">Part 4</span> Enterprise Expansion: Multiple Fact Tables</h2>
+    <p>A real data warehouse isn't just one STAR. It contains multiple fact tables (e.g., Sales, Inventory, Customer Support) that share the same dimensions. These shared dimensions are called <strong>Conformed Dimensions</strong>.</p>
+    
+    <div class="diagram-container">
+      <pre class="mermaid">
+erDiagram
+    DIM_CUSTOMER ||--o{ FACT_SALES : measures
+    DIM_DATE ||--o{ FACT_SALES : tracks
+    DIM_CUSTOMER ||--o{ FACT_SUPPORT : raises
+    DIM_DATE ||--o{ FACT_SUPPORT : logs
+
+    DIM_CUSTOMER { int customer_key PK }
+    DIM_DATE { int date_key PK }
+    FACT_SALES { int sales_id PK int customer_key FK int date_key FK decimal sales_amount }
+    FACT_SUPPORT { int ticket_id PK int customer_key FK int date_key FK int satisfaction_score }
+      </pre>
+    </div>
+
+    <div class="code-container">
+      <div class="code-header">
+        <span>SQL: Cross-Process Analysis via Conformed Dimensions</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><code>USE ecommerce_dw;
+
+-- 1. Create a Support Tickets Fact Table
+CREATE TABLE fact_support (
+    ticket_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_key INT, date_key INT, satisfaction_score INT
+);
+
+-- 2. Insert Support Data linking to the SAME Conformed Dimensions
+INSERT INTO fact_support (customer_key, date_key, satisfaction_score) VALUES 
+(1, 20240301, 5), (2, 20240302, 2);
+
+-- 3. Query across business processes (Sales vs. Support)
+SELECT 
+    c.full_name,
+    SUM(fs.sales_amount) AS total_spend,
+    AVG(sup.satisfaction_score) AS avg_satisfaction
+FROM dim_customer c
+LEFT JOIN fact_sales fs ON c.customer_key = fs.customer_key
+LEFT JOIN fact_support sup ON c.customer_key = sup.customer_key
+GROUP BY c.full_name;</code></pre>
+    </div>
+  </div>
+
+  <!-- Module 5: Comprehensive Comparison -->
+  <div class="section">
+    <h2><span class="badge">Part 5</span> Comprehensive Side-by-Side Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Challenge Dimension</th>
+          <th>OLTP (Normalized Model)</th>
+          <th>STAR Schema (Dimensional Model)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Query Complexity (Joins)</strong></td>
+          <td>High. Requires navigating deep entity hierarchies (5+ joins) to produce basic business metrics.</td>
+          <td>Low. Requires only 1 to 3 direct joins from the central Fact table to pre-flattened Dimension tables.</td>
+        </tr>
+        <tr>
+          <td><strong>System Concurrency</strong></td>
+          <td>Heavy reporting queries place read locks on active tables, causing lag or failed user checkouts.</td>
+          <td>Analytical queries run on isolated Data Warehouses. Zero impact on active business transactions.</td>
+        </tr>
+        <tr>
+          <td><strong>Historical Tracking</strong></td>
+          <td>Updates overwrite data in place; historical snapshots are lost without complex audit logging.</td>
+          <td>Slowly Changing Dimensions (SCDs) safely track and preserve historical changes over time.</td>
+        </tr>
+        <tr>
+          <td><strong>Aggregation Performance</strong></td>
+          <td>Math is calculated dynamically on the fly by scanning millions of raw string/date rows.</td>
+          <td>Numeric metrics are pre-calculated in facts; dimensions provide pre-indexed attributes for instant slicing.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  function copyCode(button) {
+    const codeBlock = button.closest('.code-container').querySelector('code');
+    const textToCopy = codeBlock.innerText;
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      const originalText = button.innerText;
+      button.innerText = 'Copied!';
+      button.classList.add('copied');
+      setTimeout(() => {
+        button.innerText = originalText;
+        button.classList.remove('copied');
+      }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>
