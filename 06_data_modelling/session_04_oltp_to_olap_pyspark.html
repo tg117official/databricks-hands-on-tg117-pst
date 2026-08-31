@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A hands-on PySpark shell lesson that reads normalized EcomSphere OLTP data from MySQL, builds dimensions and a sales fact, and writes a MySQL OLAP star schema.">
+  <title>EcomSphere Session 4 - OLTP to OLAP with PySpark and MySQL</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f6fb;
+      --surface: #ffffff;
+      --surface-2: #edf3ff;
+      --text: #172033;
+      --muted: #526079;
+      --line: #d7dfeb;
+      --primary: #155eef;
+      --primary-dark: #0e46b8;
+      --primary-soft: #e8f0ff;
+      --accent: #087a63;
+      --accent-soft: #e5f7f2;
+      --warning: #985b00;
+      --warning-soft: #fff4dc;
+      --danger: #a83232;
+      --danger-soft: #fff0f0;
+      --code-bg: #101827;
+      --code-text: #eaf0fa;
+      --shadow: 0 12px 30px rgba(35, 55, 90, 0.09);
+      --radius: 16px;
+    }
+
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0d1320;
+      --surface: #151d2c;
+      --surface-2: #19263d;
+      --text: #edf3ff;
+      --muted: #b1bdd0;
+      --line: #2a3850;
+      --primary: #78a7ff;
+      --primary-dark: #a8c5ff;
+      --primary-soft: #1b3157;
+      --accent: #62d8bd;
+      --accent-soft: #143b35;
+      --warning: #ffc769;
+      --warning-soft: #3f3015;
+      --danger: #ff9292;
+      --danger-soft: #462323;
+      --code-bg: #080d16;
+      --code-text: #edf3ff;
+      --shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 17px;
+      line-height: 1.65;
+    }
+    a { color: var(--primary); }
+    code, pre, kbd { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
+    code:not(pre code) {
+      padding: 0.12rem 0.34rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface-2);
+      color: var(--primary-dark);
+      font-size: 0.92em;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: -999px;
+      top: 8px;
+      z-index: 100;
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .skip-link:focus { left: 8px; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.72rem max(1rem, calc((100vw - 1200px) / 2));
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(12px);
+    }
+    .brand { font-weight: 800; letter-spacing: -0.02em; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 0.48rem 0.72rem;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    button:hover, button:focus-visible { border-color: var(--primary); outline: none; }
+
+    .hero {
+      padding: 4.2rem max(1rem, calc((100vw - 1200px) / 2)) 3.2rem;
+      background:
+        radial-gradient(circle at 88% 20%, rgba(21, 94, 239, 0.18), transparent 31%),
+        linear-gradient(135deg, var(--surface), var(--primary-soft));
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      display: inline-flex;
+      margin-bottom: 0.8rem;
+      padding: 0.26rem 0.62rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
+    h1 { max-width: 1000px; margin: 0; font-size: clamp(2.15rem, 5vw, 4rem); }
+    .lead { max-width: 900px; margin: 1.1rem 0 0; color: var(--muted); font-size: 1.12rem; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.45rem; }
+    .chip {
+      padding: 0.38rem 0.7rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 275px;
+      gap: 2rem;
+      width: min(1200px, calc(100% - 2rem));
+      margin: 2rem auto 5rem;
+    }
+    main { min-width: 0; }
+    aside { order: 2; }
+    .toc {
+      position: sticky;
+      top: 76px;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .toc strong { display: block; margin-bottom: 0.65rem; }
+    .toc ol { margin: 0; padding-left: 1.2rem; }
+    .toc li { margin: 0.3rem 0; color: var(--muted); font-size: 0.84rem; line-height: 1.35; }
+    .toc a { color: inherit; text-decoration: none; }
+    .toc a:hover { color: var(--primary); text-decoration: underline; }
+
+    section {
+      margin-bottom: 1.5rem;
+      padding: clamp(1.1rem, 2.5vw, 2rem);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      scroll-margin-top: 80px;
+    }
+    h2 { margin: 0 0 1rem; font-size: clamp(1.5rem, 3vw, 2.1rem); }
+    h3 { margin: 1.55rem 0 0.6rem; font-size: 1.18rem; }
+    h4 { margin: 1.2rem 0 0.35rem; font-size: 1rem; }
+    p { margin: 0.65rem 0 1rem; }
+    ul, ol { padding-left: 1.35rem; }
+    li { margin: 0.34rem 0; }
+
+    .note, .warning, .result, .definition {
+      margin: 1rem 0;
+      padding: 0.86rem 1rem;
+      border-left: 4px solid var(--primary);
+      border-radius: 0 10px 10px 0;
+      background: var(--primary-soft);
+    }
+    .note { border-color: var(--accent); background: var(--accent-soft); }
+    .warning { border-color: var(--warning); background: var(--warning-soft); }
+    .result { border-color: var(--accent); background: var(--accent-soft); }
+    .definition { border-color: var(--primary); background: var(--primary-soft); }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.8rem;
+      margin: 1rem 0;
+    }
+    .decision {
+      padding: 0.95rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    .decision strong { display: block; margin-bottom: 0.25rem; color: var(--primary-dark); }
+    .decision span { color: var(--muted); font-size: 0.94rem; }
+
+    .table-wrap {
+      margin: 1rem 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 650px; }
+    th, td { padding: 0.72rem 0.82rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--surface-2); font-size: 0.88rem; }
+    tr:last-child td { border-bottom: 0; }
+
+    .diagram {
+      margin: 1.15rem 0 1.35rem;
+      padding: 1rem;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #f8fbff;
+    }
+    [data-theme="dark"] .diagram { background: #101827; }
+    .diagram svg { display: block; width: 100%; min-width: 760px; height: auto; }
+    .diagram figcaption { margin-top: 0.7rem; color: var(--muted); font-size: 0.9rem; text-align: center; }
+    .entity { fill: #ffffff; stroke: #155eef; stroke-width: 2; }
+    .entity-head { fill: #155eef; }
+    .fact { fill: #ffffff; stroke: #087a63; stroke-width: 3; }
+    .fact-head { fill: #087a63; }
+    .process { fill: #ffffff; stroke: #087a63; stroke-width: 2; }
+    .process-head { fill: #087a63; }
+    .entity-title { fill: #ffffff; font: 700 15px Inter, sans-serif; }
+    .entity-text { fill: #172033; font: 13px "Cascadia Code", Consolas, monospace; }
+    .diagram-text { fill: #172033; font: 700 14px Inter, sans-serif; }
+    .diagram-sub { fill: #526079; font: 13px Inter, sans-serif; }
+    .relation { fill: none; stroke: #526079; stroke-width: 2; }
+    .arrow { fill: #526079; }
+    .relation-label { fill: #35425a; font: 700 12px Inter, sans-serif; }
+    .pk { fill: #087a63; font-weight: 700; }
+    .fk { fill: #a15a00; font-weight: 700; }
+    [data-theme="dark"] .entity, [data-theme="dark"] .fact, [data-theme="dark"] .process { fill: #182337; stroke: #78a7ff; }
+    [data-theme="dark"] .fact, [data-theme="dark"] .process { stroke: #62d8bd; }
+    [data-theme="dark"] .entity-head { fill: #315d9f; }
+    [data-theme="dark"] .fact-head, [data-theme="dark"] .process-head { fill: #176d5c; }
+    [data-theme="dark"] .entity-text, [data-theme="dark"] .diagram-text { fill: #edf3ff; }
+    [data-theme="dark"] .diagram-sub { fill: #b1bdd0; }
+    [data-theme="dark"] .relation { stroke: #b1bdd0; }
+    [data-theme="dark"] .arrow { fill: #b1bdd0; }
+    [data-theme="dark"] .relation-label { fill: #dce6f7; }
+    [data-theme="dark"] .pk { fill: #62d8bd; }
+    [data-theme="dark"] .fk { fill: #ffc769; }
+
+    details.code-panel {
+      margin: 0.9rem 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    details.code-panel > summary {
+      position: relative;
+      padding: 0.9rem 3rem 0.9rem 1rem;
+      background: var(--surface-2);
+      font-weight: 800;
+      cursor: pointer;
+      list-style: none;
+    }
+    details.code-panel > summary::-webkit-details-marker { display: none; }
+    details.code-panel > summary::after {
+      content: "+";
+      position: absolute;
+      right: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.35rem;
+      line-height: 1;
+      color: var(--primary);
+    }
+    details.code-panel[open] > summary::after { content: "−"; }
+    .code-wrap { position: relative; background: var(--code-bg); }
+    .code-label {
+      padding: 0.58rem 5rem 0.35rem 1rem;
+      color: #aab8ce;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .copy-code {
+      position: absolute;
+      right: 0.7rem;
+      top: 0.48rem;
+      border-color: #3a4961;
+      background: #1b273a;
+      color: #f3f7ff;
+      font-size: 0.74rem;
+    }
+    pre {
+      margin: 0;
+      padding: 0.7rem 1rem 1.2rem;
+      overflow-x: auto;
+      color: var(--code-text);
+      font-size: 0.86rem;
+      line-height: 1.61;
+      tab-size: 4;
+    }
+    pre code { color: inherit; }
+
+    .grain {
+      margin: 1rem 0;
+      padding: 1rem;
+      border: 2px solid var(--accent);
+      border-radius: 12px;
+      background: var(--accent-soft);
+      text-align: center;
+      font-size: 1.08rem;
+      font-weight: 800;
+    }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { position: relative; padding-left: 1.7rem; }
+    .checklist li::before { content: "✓"; position: absolute; left: 0; color: var(--accent); font-weight: 900; }
+
+    footer {
+      padding: 1.5rem 1rem 3rem;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 940px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { order: 0; }
+      .toc { position: static; }
+    }
+    @media (max-width: 680px) {
+      body { font-size: 16px; }
+      .hero { padding-top: 3rem; }
+      .decision-grid { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; }
+      .brand { max-width: 58%; }
+      section { padding: 1rem; }
+      pre { font-size: 0.79rem; }
+    }
+    @media print {
+      .topbar, aside, .copy-code { display: none !important; }
+      body { background: white; color: black; font-size: 11pt; }
+      .layout { display: block; width: 100%; margin: 0; }
+      section { break-inside: avoid; box-shadow: none; border-color: #bbb; }
+      details.code-panel > * { display: block !important; }
+      .diagram { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#lesson">Skip to lesson</a>
+
+  <div class="topbar">
+    <div class="brand">EcomSphere · OLTP to OLAP</div>
+    <div class="toolbar" aria-label="Page controls">
+      <button type="button" id="expand-code">Expand all code</button>
+      <button type="button" id="collapse-code">Collapse all code</button>
+      <button type="button" id="theme-toggle" aria-pressed="false">Dark theme</button>
+    </div>
+  </div>
+
+  <header class="hero">
+    <span class="eyebrow">Session 4 · PySpark shell and MySQL</span>
+    <h1>Convert an OLTP Model into an OLAP Star Schema</h1>
+    <p class="lead">Read normalized MySQL tables with PySpark, apply the business decisions, load dimensions, look up surrogate keys, build the sales fact, and write the final star schema back to MySQL.</p>
+    <div class="hero-meta" aria-label="Lesson information">
+      <span class="chip">90 minutes</span>
+      <span class="chip">Local PySpark shell</span>
+      <span class="chip">MySQL OLTP source</span>
+      <span class="chip">MySQL OLAP target</span>
+      <span class="chip">Full refresh</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <nav class="toc" aria-label="Lesson index">
+        <strong>Lesson index</strong>
+        <ol>
+          <li><a href="#pipeline">Understand the local conversion flow</a></li>
+          <li><a href="#source-setup">Create the OLTP source and data</a></li>
+          <li><a href="#target-setup">Create the OLAP target tables</a></li>
+          <li><a href="#decisions">Record the star-schema decisions</a></li>
+          <li><a href="#shell">Start PySpark with the MySQL driver</a></li>
+          <li><a href="#extract">Read and inspect the OLTP tables</a></li>
+          <li><a href="#dimensions">Build and load the dimensions</a></li>
+          <li><a href="#fact">Build and validate the sales fact</a></li>
+          <li><a href="#load">Load and verify the OLAP model</a></li>
+          <li><a href="#analytics">Run analytical MySQL queries</a></li>
+          <li><a href="#checkpoint">Complete the pipeline checkpoint</a></li>
+        </ol>
+      </nav>
+    </aside>
+
+    <main id="lesson">
+      <section id="pipeline">
+        <h2>1. The local OLTP-to-OLAP pipeline</h2>
+        <p>Both databases run in the same local MySQL server. PySpark reads the OLTP tables through JDBC, changes their shape, and writes the star schema through JDBC.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 1200 390" role="img" aria-labelledby="pipe-title pipe-desc">
+            <title id="pipe-title">Local OLTP to OLAP conversion pipeline</title>
+            <desc id="pipe-desc">A MySQL OLTP database sends normalized tables through JDBC to PySpark. PySpark builds dimensions and a fact table and writes them through JDBC to a MySQL OLAP database.</desc>
+
+            <rect class="entity" x="45" y="70" width="300" height="230" rx="14"/>
+            <path class="entity-head" d="M59 70h272a14 14 0 0 1 14 14v48H45V84a14 14 0 0 1 14-14z"/>
+            <text class="entity-title" x="195" y="107" text-anchor="middle">MySQL: ecomsphere_oltp</text>
+            <text class="entity-text" x="72" y="165">customer, product</text>
+            <text class="entity-text" x="72" y="193">category, orders</text>
+            <text class="entity-text" x="72" y="221">order_item, payment</text>
+            <text class="entity-text" x="72" y="249">normalized relationships</text>
+
+            <rect class="process" x="450" y="70" width="300" height="230" rx="14"/>
+            <path class="process-head" d="M464 70h272a14 14 0 0 1 14 14v48H450V84a14 14 0 0 1 14-14z"/>
+            <text class="entity-title" x="600" y="107" text-anchor="middle">Local PySpark shell</text>
+            <text class="entity-text" x="477" y="165">read JDBC tables</text>
+            <text class="entity-text" x="477" y="193">join and flatten</text>
+            <text class="entity-text" x="477" y="221">calculate measures</text>
+            <text class="entity-text" x="477" y="249">validate before write</text>
+
+            <rect class="fact" x="855" y="70" width="300" height="230" rx="14"/>
+            <path class="fact-head" d="M869 70h272a14 14 0 0 1 14 14v48H855V84a14 14 0 0 1 14-14z"/>
+            <text class="entity-title" x="1005" y="107" text-anchor="middle">MySQL: ecomsphere_olap</text>
+            <text class="entity-text" x="882" y="165">dim_customer</text>
+            <text class="entity-text" x="882" y="193">dim_product, dim_date</text>
+            <text class="entity-text" x="882" y="221">dim_channel</text>
+            <text class="entity-text" x="882" y="249">fact_sales</text>
+
+            <path class="relation" d="M345 185H450"/>
+            <polygon class="arrow" points="450,185 434,176 434,194"/>
+            <text class="relation-label" x="397" y="168" text-anchor="middle">JDBC read</text>
+            <path class="relation" d="M750 185H855"/>
+            <polygon class="arrow" points="855,185 839,176 839,194"/>
+            <text class="relation-label" x="802" y="168" text-anchor="middle">JDBC write</text>
+          </svg>
+          <figcaption>The source remains normalized. The target is shaped for analytics.</figcaption>
+        </figure>
+
+        <div class="note"><strong>Load style for this lesson:</strong> the target is cleared and rebuilt. This full-refresh approach keeps the first conversion easy to follow. Incremental loading and SCD logic belong in later sessions.</div>
+      </section>
+
+      <section id="source-setup">
+        <h2>2. Create the OLTP source</h2>
+        <p>The setup contains enough connected data for useful transformations and reports. Foreign keys protect every relationship.</p>
+
+        <div class="warning"><strong>Reset notice:</strong> the setup deletes only <code>ecomsphere_oltp</code> and <code>ecomsphere_olap</code>. Do not keep unrelated work in these databases.</div>
+
+        <details class="code-panel">
+          <summary>Run 0A in MySQL Workbench - create the OLTP tables</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT VERSION() AS mysql_version;
+
+DROP DATABASE IF EXISTS ecomsphere_olap;
+DROP DATABASE IF EXISTS ecomsphere_oltp;
+
+CREATE DATABASE ecomsphere_oltp
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+
+USE ecomsphere_oltp;
+
+CREATE TABLE customer_status
+(
+    customer_status_code VARCHAR(20) PRIMARY KEY,
+    customer_status_name VARCHAR(50) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE customer
+(
+    customer_id          INT PRIMARY KEY,
+    customer_name        VARCHAR(100) NOT NULL,
+    city                 VARCHAR(80) NOT NULL,
+    country              VARCHAR(80) NOT NULL,
+    customer_status_code VARCHAR(20) NOT NULL,
+
+    CONSTRAINT fk_customer_status
+        FOREIGN KEY (customer_status_code)
+        REFERENCES customer_status(customer_status_code)
+) ENGINE = InnoDB;
+
+CREATE TABLE category
+(
+    category_id   INT PRIMARY KEY,
+    category_name VARCHAR(100) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE product
+(
+    product_id   INT PRIMARY KEY,
+    product_name VARCHAR(150) NOT NULL,
+    category_id  INT NOT NULL,
+
+    CONSTRAINT fk_product_category
+        FOREIGN KEY (category_id)
+        REFERENCES category(category_id)
+) ENGINE = InnoDB;
+
+CREATE TABLE order_channel
+(
+    order_channel_code VARCHAR(30) PRIMARY KEY,
+    order_channel_name VARCHAR(60) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE order_status
+(
+    order_status_code VARCHAR(30) PRIMARY KEY,
+    order_status_name VARCHAR(60) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE orders
+(
+    order_id           INT PRIMARY KEY,
+    order_date         DATE NOT NULL,
+    customer_id        INT NOT NULL,
+    order_channel_code VARCHAR(30) NOT NULL,
+    order_status_code  VARCHAR(30) NOT NULL,
+
+    CONSTRAINT fk_orders_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customer(customer_id),
+
+    CONSTRAINT fk_orders_channel
+        FOREIGN KEY (order_channel_code)
+        REFERENCES order_channel(order_channel_code),
+
+    CONSTRAINT fk_orders_status
+        FOREIGN KEY (order_status_code)
+        REFERENCES order_status(order_status_code)
+) ENGINE = InnoDB;
+
+CREATE TABLE order_item
+(
+    order_item_id   INT PRIMARY KEY,
+    order_id        INT NOT NULL,
+    product_id      INT NOT NULL,
+    quantity        INT NOT NULL,
+    unit_price      DECIMAL(12,2) NOT NULL,
+    discount_amount DECIMAL(12,2) NOT NULL,
+
+    CONSTRAINT chk_order_item_quantity CHECK (quantity &gt; 0),
+    CONSTRAINT chk_order_item_price CHECK (unit_price &gt;= 0),
+    CONSTRAINT chk_order_item_discount CHECK (discount_amount &gt;= 0),
+
+    CONSTRAINT fk_order_item_order
+        FOREIGN KEY (order_id)
+        REFERENCES orders(order_id),
+
+    CONSTRAINT fk_order_item_product
+        FOREIGN KEY (product_id)
+        REFERENCES product(product_id)
+) ENGINE = InnoDB;
+
+CREATE TABLE payment_method
+(
+    payment_method_code VARCHAR(30) PRIMARY KEY,
+    payment_method_name VARCHAR(60) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE payment_status
+(
+    payment_status_code VARCHAR(30) PRIMARY KEY,
+    payment_status_name VARCHAR(60) NOT NULL
+) ENGINE = InnoDB;
+
+CREATE TABLE payment
+(
+    payment_id          INT PRIMARY KEY,
+    order_id            INT NOT NULL,
+    payment_method_code VARCHAR(30) NOT NULL,
+    payment_status_code VARCHAR(30) NOT NULL,
+    payment_amount      DECIMAL(14,2) NOT NULL,
+
+    CONSTRAINT fk_payment_order
+        FOREIGN KEY (order_id)
+        REFERENCES orders(order_id),
+
+    CONSTRAINT fk_payment_method
+        FOREIGN KEY (payment_method_code)
+        REFERENCES payment_method(payment_method_code),
+
+    CONSTRAINT fk_payment_status
+        FOREIGN KEY (payment_status_code)
+        REFERENCES payment_status(payment_status_code)
+) ENGINE = InnoDB;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 0B in MySQL Workbench - insert reference, customer and product data</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_oltp;
+
+INSERT INTO customer_status
+    (customer_status_code, customer_status_name)
+VALUES
+    ('ACTIVE', 'Active'),
+    ('INACTIVE', 'Inactive'),
+    ('BLOCKED', 'Blocked'),
+    ('PROSPECT', 'Prospect'),
+    ('SUSPENDED', 'Suspended');
+
+INSERT INTO customer
+    (customer_id, customer_name, city, country, customer_status_code)
+VALUES
+    (101, 'Aditi Sharma', 'Pune', 'India', 'ACTIVE'),
+    (102, 'Rohit Verma', 'Mumbai', 'India', 'ACTIVE'),
+    (103, 'Maya Johnson', 'Austin', 'United States', 'ACTIVE'),
+    (104, 'Ethan Miller', 'Seattle', 'United States', 'ACTIVE'),
+    (105, 'Priya Nair', 'Bengaluru', 'India', 'ACTIVE'),
+    (106, 'Arjun Mehta', 'Delhi', 'India', 'ACTIVE'),
+    (107, 'Sophia Wilson', 'Boston', 'United States', 'ACTIVE'),
+    (108, 'Liam Brown', 'Chicago', 'United States', 'ACTIVE'),
+    (109, 'Kavya Reddy', 'Hyderabad', 'India', 'ACTIVE'),
+    (110, 'Noah Davis', 'Denver', 'United States', 'INACTIVE');
+
+INSERT INTO category
+    (category_id, category_name)
+VALUES
+    (301, 'Accessories'),
+    (302, 'Electronics'),
+    (303, 'Home Office'),
+    (304, 'Mobile Devices'),
+    (305, 'Audio'),
+    (306, 'Fitness');
+
+INSERT INTO product
+    (product_id, product_name, category_id)
+VALUES
+    (501, 'Wireless Mouse', 301),
+    (502, 'Mechanical Keyboard', 301),
+    (503, 'USB-C Dock', 302),
+    (504, 'HD Webcam', 302),
+    (505, 'Desk Lamp', 303),
+    (506, 'Office Chair', 303),
+    (507, 'Smartphone', 304),
+    (508, 'Tablet', 304),
+    (509, 'Wireless Headphones', 305),
+    (510, 'Bluetooth Speaker', 305),
+    (511, 'Smart Watch', 306),
+    (512, 'Yoga Mat', 306);
+
+INSERT INTO order_channel
+    (order_channel_code, order_channel_name)
+VALUES
+    ('WEBSITE', 'Website'),
+    ('MOBILE_APP', 'Mobile App'),
+    ('CALL_CENTER', 'Call Center'),
+    ('MARKETPLACE', 'Marketplace'),
+    ('STORE', 'Physical Store');
+
+INSERT INTO order_status
+    (order_status_code, order_status_name)
+VALUES
+    ('PENDING', 'Pending'),
+    ('PAID', 'Paid'),
+    ('SHIPPED', 'Shipped'),
+    ('DELIVERED', 'Delivered'),
+    ('CANCELLED', 'Cancelled');
+
+INSERT INTO payment_method
+    (payment_method_code, payment_method_name)
+VALUES
+    ('UPI', 'UPI'),
+    ('CARD', 'Card'),
+    ('NETBANKING', 'Net Banking'),
+    ('COD', 'Cash on Delivery'),
+    ('WALLET', 'Digital Wallet');
+
+INSERT INTO payment_status
+    (payment_status_code, payment_status_name)
+VALUES
+    ('PENDING', 'Pending'),
+    ('SUCCESS', 'Success'),
+    ('FAILED', 'Failed'),
+    ('REFUNDED', 'Refunded'),
+    ('CANCELLED', 'Cancelled');</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 0C in MySQL Workbench - insert orders and 36 order items</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_oltp;
+
+INSERT INTO orders
+    (order_id, order_date, customer_id, order_channel_code, order_status_code)
+VALUES
+    (1001, '2026-01-05', 101, 'WEBSITE', 'PAID'),
+    (1002, '2026-01-10', 102, 'MOBILE_APP', 'DELIVERED'),
+    (1003, '2026-01-18', 103, 'WEBSITE', 'SHIPPED'),
+    (1004, '2026-01-25', 104, 'MARKETPLACE', 'CANCELLED'),
+    (1005, '2026-02-02', 105, 'MOBILE_APP', 'PAID'),
+    (1006, '2026-02-08', 106, 'CALL_CENTER', 'DELIVERED'),
+    (1007, '2026-02-14', 107, 'WEBSITE', 'PAID'),
+    (1008, '2026-02-20', 108, 'STORE', 'DELIVERED'),
+    (1009, '2026-03-01', 109, 'MARKETPLACE', 'SHIPPED'),
+    (1010, '2026-03-07', 110, 'WEBSITE', 'PENDING'),
+    (1011, '2026-03-12', 101, 'MOBILE_APP', 'DELIVERED'),
+    (1012, '2026-03-18', 102, 'CALL_CENTER', 'PAID'),
+    (1013, '2026-04-03', 103, 'MARKETPLACE', 'DELIVERED'),
+    (1014, '2026-04-10', 104, 'WEBSITE', 'PAID'),
+    (1015, '2026-04-16', 105, 'STORE', 'SHIPPED'),
+    (1016, '2026-04-22', 106, 'MOBILE_APP', 'CANCELLED'),
+    (1017, '2026-05-05', 107, 'WEBSITE', 'DELIVERED'),
+    (1018, '2026-05-12', 108, 'MARKETPLACE', 'PAID');
+
+INSERT INTO order_item
+    (order_item_id, order_id, product_id, quantity, unit_price, discount_amount)
+VALUES
+    (2001, 1001, 501, 2,   799.00,  100.00),
+    (2002, 1001, 502, 1,  2499.00,  200.00),
+    (2003, 1002, 503, 1,  6499.00,  500.00),
+    (2004, 1002, 504, 1,  3299.00,    0.00),
+    (2005, 1003, 505, 2,  1499.00,  150.00),
+    (2006, 1003, 506, 1,  8999.00,  800.00),
+    (2007, 1004, 507, 1, 24999.00, 1500.00),
+    (2008, 1004, 508, 1, 18999.00, 1000.00),
+    (2009, 1005, 509, 2,  3999.00,  400.00),
+    (2010, 1005, 510, 1,  5499.00,  300.00),
+    (2011, 1006, 511, 1,  6999.00,  500.00),
+    (2012, 1006, 512, 3,   999.00,  100.00),
+    (2013, 1007, 507, 1, 24999.00, 1000.00),
+    (2014, 1007, 509, 1,  3999.00,    0.00),
+    (2015, 1008, 506, 1,  8999.00,  700.00),
+    (2016, 1008, 505, 2,  1499.00,    0.00),
+    (2017, 1009, 508, 1, 18999.00,  900.00),
+    (2018, 1009, 511, 2,  6999.00,  600.00),
+    (2019, 1010, 502, 1,  2499.00,    0.00),
+    (2020, 1010, 501, 1,   799.00,    0.00),
+    (2021, 1011, 504, 2,  3299.00,  300.00),
+    (2022, 1011, 503, 1,  6499.00,  400.00),
+    (2023, 1012, 512, 4,   999.00,  200.00),
+    (2024, 1012, 509, 1,  3999.00,  100.00),
+    (2025, 1013, 510, 2,  5499.00,  500.00),
+    (2026, 1013, 507, 1, 24999.00, 1200.00),
+    (2027, 1014, 501, 3,   799.00,  150.00),
+    (2028, 1014, 505, 1,  1499.00,    0.00),
+    (2029, 1015, 508, 1, 18999.00,  700.00),
+    (2030, 1015, 502, 1,  2499.00,  100.00),
+    (2031, 1016, 511, 1,  6999.00,    0.00),
+    (2032, 1016, 506, 1,  8999.00,  500.00),
+    (2033, 1017, 509, 2,  3999.00,  300.00),
+    (2034, 1017, 504, 1,  3299.00,    0.00),
+    (2035, 1018, 507, 1, 24999.00, 1000.00),
+    (2036, 1018, 512, 2,   999.00,   50.00);</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 0D in MySQL Workbench - insert 24 payment attempts</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_oltp;
+
+INSERT INTO payment
+    (payment_id, order_id, payment_method_code, payment_status_code, payment_amount)
+VALUES
+    (3001, 1001, 'CARD',       'FAILED',    3797.00),
+    (3002, 1001, 'UPI',        'SUCCESS',   3797.00),
+    (3003, 1002, 'CARD',       'SUCCESS',   9298.00),
+    (3004, 1003, 'WALLET',     'FAILED',   11047.00),
+    (3005, 1003, 'CARD',       'SUCCESS',  11047.00),
+    (3006, 1004, 'CARD',       'CANCELLED',41498.00),
+    (3007, 1005, 'UPI',        'SUCCESS',  12797.00),
+    (3008, 1006, 'COD',        'PENDING',   9396.00),
+    (3009, 1006, 'NETBANKING', 'SUCCESS',   9396.00),
+    (3010, 1007, 'CARD',       'FAILED',   27998.00),
+    (3011, 1007, 'UPI',        'SUCCESS',  27998.00),
+    (3012, 1008, 'CARD',       'SUCCESS',  11297.00),
+    (3013, 1009, 'WALLET',     'SUCCESS',  31497.00),
+    (3014, 1010, 'UPI',        'PENDING',   3298.00),
+    (3015, 1011, 'CARD',       'SUCCESS',  12397.00),
+    (3016, 1012, 'CARD',       'FAILED',    7695.00),
+    (3017, 1012, 'NETBANKING', 'SUCCESS',   7695.00),
+    (3018, 1013, 'CARD',       'SUCCESS',  34297.00),
+    (3019, 1014, 'UPI',        'SUCCESS',   3746.00),
+    (3020, 1015, 'CARD',       'SUCCESS',  20698.00),
+    (3021, 1016, 'CARD',       'CANCELLED',15498.00),
+    (3022, 1017, 'WALLET',     'FAILED',   10997.00),
+    (3023, 1017, 'CARD',       'SUCCESS',  10997.00),
+    (3024, 1018, 'UPI',        'SUCCESS',  25947.00);</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 0E in MySQL Workbench - verify source counts and relationships</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_oltp;
+
+SELECT 'customer_status' AS table_name, COUNT(*) AS row_count FROM customer_status
+UNION ALL SELECT 'customer', COUNT(*) FROM customer
+UNION ALL SELECT 'category', COUNT(*) FROM category
+UNION ALL SELECT 'product', COUNT(*) FROM product
+UNION ALL SELECT 'order_channel', COUNT(*) FROM order_channel
+UNION ALL SELECT 'order_status', COUNT(*) FROM order_status
+UNION ALL SELECT 'orders', COUNT(*) FROM orders
+UNION ALL SELECT 'order_item', COUNT(*) FROM order_item
+UNION ALL SELECT 'payment_method', COUNT(*) FROM payment_method
+UNION ALL SELECT 'payment_status', COUNT(*) FROM payment_status
+UNION ALL SELECT 'payment', COUNT(*) FROM payment;
+
+SELECT COUNT(*) AS orphan_order_items
+FROM order_item AS oi
+LEFT JOIN orders AS o ON oi.order_id = o.order_id
+LEFT JOIN product AS p ON oi.product_id = p.product_id
+WHERE o.order_id IS NULL OR p.product_id IS NULL;
+
+SELECT COUNT(*) AS orphan_payments
+FROM payment AS pay
+LEFT JOIN orders AS o ON pay.order_id = o.order_id
+LEFT JOIN payment_method AS pm
+    ON pay.payment_method_code = pm.payment_method_code
+LEFT JOIN payment_status AS ps
+    ON pay.payment_status_code = ps.payment_status_code
+WHERE o.order_id IS NULL
+   OR pm.payment_method_code IS NULL
+   OR ps.payment_status_code IS NULL;</code></pre>
+          </div>
+        </details>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Data group</th><th>Rows</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td>Customer statuses / customers</td><td>5 / 10</td><td>Customer master and controlled status values</td></tr>
+              <tr><td>Categories / products</td><td>6 / 12</td><td>Normalized product hierarchy</td></tr>
+              <tr><td>Channels / order statuses</td><td>5 / 5</td><td>Controlled order classifications</td></tr>
+              <tr><td>Orders / order items</td><td>18 / 36</td><td>Order-level and line-level transactions</td></tr>
+              <tr><td>Payment methods / statuses / attempts</td><td>5 / 5 / 24</td><td>Repeated payment attempts at a different grain</td></tr>
+              <tr><td>Orphan checks</td><td>0 / 0</td><td>Every foreign-key relationship is valid</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="target-setup">
+        <h2>3. Create the OLAP target</h2>
+        <p>The OLAP tables are created before PySpark writes data. This keeps MySQL keys, constraints and data types under our control.</p>
+
+        <h3>Target star schema</h3>
+        <p>The fact table stays in the center because it stores the sales event and its numbers. Each dimension answers a different business question: who bought, what was bought, when it happened and how the order was placed.</p>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 1180 650" role="img" aria-labelledby="star-title star-desc">
+            <title id="star-title">Sales star schema</title>
+            <desc id="star-desc">The fact_sales table connects to customer, product, date and channel dimensions through foreign keys.</desc>
+
+            <path class="relation" d="M340 185 C430 185 430 265 515 265"/>
+            <path class="relation" d="M840 185 C750 185 750 265 665 265"/>
+            <path class="relation" d="M340 500 C430 500 430 390 515 390"/>
+            <path class="relation" d="M840 500 C750 500 750 390 665 390"/>
+            <text class="relation-label" x="395" y="166">1 to many</text>
+            <text class="relation-label" x="708" y="166">1 to many</text>
+            <text class="relation-label" x="395" y="526">1 to many</text>
+            <text class="relation-label" x="708" y="526">1 to many</text>
+
+            <rect class="entity" x="40" y="70" width="300" height="230" rx="14"/>
+            <path class="entity-head" d="M54 70h272a14 14 0 0 1 14 14v44H40V84a14 14 0 0 1 14-14z"/>
+            <text class="entity-title" x="190" y="105" text-anchor="middle">dim_customer</text>
+            <text class="entity-text pk" x="65" y="158">PK customer_key</text>
+            <text class="entity-text" x="65" y="188">customer_id</text>
+            <text class="entity-text" x="65" y="218">customer_name</text>
+            <text class="entity-text" x="65" y="248">city, country</text>
+            <text class="entity-text" x="65" y="278">customer_status</text>
+
+            <rect class="entity" x="840" y="70" width="300" height="230" rx="14"/>
+            <path class="entity-head" d="M854 70h272a14 14 0 0 1 14 14v44H840V84a14 14 0 0 1 14-14z"/>
+            <text class="entity-title" x="990" y="105" text-anchor="middle">dim_product</text>
+            <text class="entity-text pk" x="865" y="158">PK product_key</text>
+            <text class="entity-text" x="865" y="188">product_id</text>
+            <text class="entity-text" x="865" y="218">product_name</text>
+            <text class="entity-text" x="865" y="248">category_id</text>
+            <text class="entity-text" x="865" y="278">category_name</text>
+
+            <rect class="fact" x="430" y="190" width="320" height="280" rx="14"/>
+            <path class="fact-head" d="M444 190h292a14 14 0 0 1 14 14v44H430V204a14 14 0 0 1 14-14z"/>
+            <text class="entity-title" x="590" y="225" text-anchor="middle">fact_sales</text>
+            <text class="entity-text pk" x="455" y="278">PK sales_key</text>
+            <text class="entity-text" x="455" y="308">order_item_id, order_id</text>
+            <text class="entity-text fk" x="455" y="338">FK customer_key, product_key</text>
+            <text class="entity-text fk" x="455" y="368">FK date_key, channel_key</text>
+            <text class="entity-text" x="455" y="398">quantity, unit_price</text>
+            <text class="entity-text" x="455" y="428">gross, discount, net sales</text>
+
+            <rect class="entity" x="40" y="390" width="300" height="210" rx="14"/>
+            <path class="entity-head" d="M54 390h272a14 14 0 0 1 14 14v44H40V404a14 14 0 0 1 14-14z"/>
+            <text class="entity-title" x="190" y="425" text-anchor="middle">dim_date</text>
+            <text class="entity-text pk" x="65" y="478">PK date_key</text>
+            <text class="entity-text" x="65" y="508">full_date, day_number</text>
+            <text class="entity-text" x="65" y="538">month_name, month_number</text>
+            <text class="entity-text" x="65" y="568">quarter_number, year_number</text>
+
+            <rect class="entity" x="840" y="390" width="300" height="210" rx="14"/>
+            <path class="entity-head" d="M854 390h272a14 14 0 0 1 14 14v44H840V404a14 14 0 0 1 14-14z"/>
+            <text class="entity-title" x="990" y="425" text-anchor="middle">dim_channel</text>
+            <text class="entity-text pk" x="865" y="478">PK channel_key</text>
+            <text class="entity-text" x="865" y="508">channel_code</text>
+            <text class="entity-text" x="865" y="538">channel_name</text>
+          </svg>
+          <figcaption>Every fact row points to exactly one row in each dimension. One dimension row can be used by many fact rows.</figcaption>
+        </figure>
+
+        <details class="code-panel">
+          <summary>Run 1A in MySQL Workbench - create four dimensions and one fact</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>CREATE DATABASE ecomsphere_olap
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+
+USE ecomsphere_olap;
+
+CREATE TABLE dim_customer
+(
+    customer_key        INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id         INT NOT NULL,
+    customer_name       VARCHAR(100) NOT NULL,
+    city                VARCHAR(80) NOT NULL,
+    country             VARCHAR(80) NOT NULL,
+    customer_status     VARCHAR(50) NOT NULL,
+
+    CONSTRAINT uq_dim_customer_id UNIQUE (customer_id)
+) ENGINE = InnoDB;
+
+CREATE TABLE dim_product
+(
+    product_key   INT AUTO_INCREMENT PRIMARY KEY,
+    product_id    INT NOT NULL,
+    product_name  VARCHAR(150) NOT NULL,
+    category_id   INT NOT NULL,
+    category_name VARCHAR(100) NOT NULL,
+
+    CONSTRAINT uq_dim_product_id UNIQUE (product_id)
+) ENGINE = InnoDB;
+
+CREATE TABLE dim_date
+(
+    date_key       INT PRIMARY KEY,
+    full_date      DATE NOT NULL,
+    day_number     INT NOT NULL,
+    month_number   INT NOT NULL,
+    month_name     VARCHAR(20) NOT NULL,
+    quarter_number INT NOT NULL,
+    year_number    INT NOT NULL,
+
+    CONSTRAINT uq_dim_date_full_date UNIQUE (full_date)
+) ENGINE = InnoDB;
+
+CREATE TABLE dim_channel
+(
+    channel_key  INT AUTO_INCREMENT PRIMARY KEY,
+    channel_code VARCHAR(30) NOT NULL,
+    channel_name VARCHAR(60) NOT NULL,
+
+    CONSTRAINT uq_dim_channel_code UNIQUE (channel_code)
+) ENGINE = InnoDB;
+
+CREATE TABLE fact_sales
+(
+    sales_key          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_item_id      INT NOT NULL,
+    order_id           INT NOT NULL,
+    customer_key       INT NOT NULL,
+    product_key        INT NOT NULL,
+    date_key           INT NOT NULL,
+    channel_key        INT NOT NULL,
+    quantity           INT NOT NULL,
+    unit_price         DECIMAL(12,2) NOT NULL,
+    gross_sales_amount DECIMAL(14,2) NOT NULL,
+    discount_amount    DECIMAL(14,2) NOT NULL,
+    net_sales_amount   DECIMAL(14,2) NOT NULL,
+
+    CONSTRAINT uq_fact_sales_order_item UNIQUE (order_item_id),
+    CONSTRAINT chk_fact_sales_quantity CHECK (quantity &gt; 0),
+
+    CONSTRAINT fk_fact_customer
+        FOREIGN KEY (customer_key) REFERENCES dim_customer(customer_key),
+    CONSTRAINT fk_fact_product
+        FOREIGN KEY (product_key) REFERENCES dim_product(product_key),
+    CONSTRAINT fk_fact_date
+        FOREIGN KEY (date_key) REFERENCES dim_date(date_key),
+    CONSTRAINT fk_fact_channel
+        FOREIGN KEY (channel_key) REFERENCES dim_channel(channel_key)
+) ENGINE = InnoDB;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 1B before each full-refresh attempt - clear the OLAP tables</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_olap;
+
+SET FOREIGN_KEY_CHECKS = 0;
+
+TRUNCATE TABLE fact_sales;
+TRUNCATE TABLE dim_customer;
+TRUNCATE TABLE dim_product;
+TRUNCATE TABLE dim_date;
+TRUNCATE TABLE dim_channel;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+SELECT 'dim_customer' AS table_name, COUNT(*) AS row_count FROM dim_customer
+UNION ALL SELECT 'dim_product', COUNT(*) FROM dim_product
+UNION ALL SELECT 'dim_date', COUNT(*) FROM dim_date
+UNION ALL SELECT 'dim_channel', COUNT(*) FROM dim_channel
+UNION ALL SELECT 'fact_sales', COUNT(*) FROM fact_sales;</code></pre>
+          </div>
+        </details>
+
+        <div class="warning"><strong>Run order matters:</strong> clear the target before starting the PySpark transformation. Do not run the clear script after the dimensions have been loaded.</div>
+      </section>
+
+      <section id="decisions">
+        <h2>4. Business decisions used in the model</h2>
+        <p>The code follows these decisions. If a business decision changes, the transformation must also change.</p>
+
+        <div class="decision-grid">
+          <div class="decision"><strong>Process: product sales</strong><span>The fact measures products sold through valid orders.</span></div>
+          <div class="decision"><strong>Grain: one order item</strong><span>One fact row represents one <code>order_item_id</code>.</span></div>
+          <div class="decision"><strong>Revenue statuses</strong><span>Only <code>PAID</code>, <code>SHIPPED</code> and <code>DELIVERED</code> orders enter the fact.</span></div>
+          <div class="decision"><strong>Payment is excluded</strong><span>One order can have many payment attempts. Payment needs a different fact and grain.</span></div>
+          <div class="decision"><strong>Customer dimension</strong><span>One row per current customer. Customer status text is flattened into the dimension.</span></div>
+          <div class="decision"><strong>Product dimension</strong><span>One row per product. Category fields are flattened to reduce reporting joins.</span></div>
+          <div class="decision"><strong>Date dimension</strong><span><code>date_key</code> uses <code>yyyyMMdd</code>. Calendar fields are prepared once.</span></div>
+          <div class="decision"><strong>Channel dimension</strong><span>One row per controlled sales channel.</span></div>
+          <div class="decision"><strong>Surrogate keys</strong><span>MySQL generates customer, product and channel keys. PySpark reads them back for the fact lookup.</span></div>
+          <div class="decision"><strong>Order ID</strong><span><code>order_id</code> stays in the fact as a degenerate dimension for order tracing.</span></div>
+          <div class="decision"><strong>Additive measures</strong><span>Quantity, gross sales, discount and net sales can be summed across fact rows.</span></div>
+          <div class="decision"><strong>Unit price</strong><span>Unit price is useful at line level, but it should not normally be summed.</span></div>
+        </div>
+
+        <div class="grain">One <code>fact_sales</code> row = one eligible <code>order_item</code> row</div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>OLTP input</th><th>OLAP output</th><th>Transformation decision</th></tr></thead>
+            <tbody>
+              <tr><td><code>customer</code> + <code>customer_status</code></td><td><code>dim_customer</code></td><td>Replace the status code with useful status text.</td></tr>
+              <tr><td><code>product</code> + <code>category</code></td><td><code>dim_product</code></td><td>Flatten the product hierarchy for reporting.</td></tr>
+              <tr><td>Distinct <code>orders.order_date</code></td><td><code>dim_date</code></td><td>Create reusable calendar fields.</td></tr>
+              <tr><td><code>order_channel</code></td><td><code>dim_channel</code></td><td>Keep one controlled row per channel.</td></tr>
+              <tr><td><code>orders</code> + <code>order_item</code></td><td><code>fact_sales</code></td><td>Filter revenue statuses and calculate measures at order-item grain.</td></tr>
+              <tr><td><code>payment</code></td><td>Not loaded here</td><td>Keep the payment-attempt grain separate from product sales.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="shell">
+        <h2>5. Start the PySpark shell</h2>
+        <p>Close any existing PySpark shell first. The MySQL JDBC driver must be present when the new shell starts.</p>
+
+        <details class="code-panel">
+          <summary>Run 2A in PowerShell, Command Prompt or a terminal - start PySpark</summary>
+          <div class="code-wrap">
+            <div class="code-label">Terminal</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>pyspark --packages com.mysql:mysql-connector-j:8.4.0</code></pre>
+          </div>
+        </details>
+
+        <p>The first execution downloads the connector from Maven Central. If package download is blocked, download the Connector/J JAR once and start PySpark with <code>--jars</code>.</p>
+
+        <details class="code-panel">
+          <summary>Optional fallback - start PySpark with a downloaded JAR</summary>
+          <div class="code-wrap">
+            <div class="code-label">Terminal</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code># Windows example
+pyspark --jars "C:\mysql-jdbc\mysql-connector-j-8.4.0.jar"
+
+# Linux example
+pyspark --jars "/opt/mysql-jdbc/mysql-connector-j-8.4.0.jar"</code></pre>
+          </div>
+        </details>
+
+        <div class="note"><strong>No Spark session setup is needed:</strong> the PySpark shell already provides the variable <code>spark</code>. Every Python block below runs inside the same shell.</div>
+
+        <details class="code-panel">
+          <summary>Run 2B in the PySpark shell - imports, password and JDBC helpers</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>from getpass import getpass
+from pyspark.sql import functions as F
+from pyspark.sql.types import DecimalType
+
+MYSQL_HOST = "localhost"
+MYSQL_PORT = "3306"
+MYSQL_USER = "root"
+MYSQL_PASSWORD = getpass("Enter the local MySQL password: ")
+MYSQL_DRIVER = "com.mysql.cj.jdbc.Driver"
+
+def mysql_url(database_name):
+    return (
+        f"jdbc:mysql://{MYSQL_HOST}:{MYSQL_PORT}/{database_name}"
+        "?useSSL=false"
+        "&amp;allowPublicKeyRetrieval=true"
+        "&amp;serverTimezone=UTC"
+    )
+
+def read_mysql(database_name, table_name):
+    return (
+        spark.read
+        .format("jdbc")
+        .option("url", mysql_url(database_name))
+        .option("dbtable", table_name)
+        .option("user", MYSQL_USER)
+        .option("password", MYSQL_PASSWORD)
+        .option("driver", MYSQL_DRIVER)
+        .load()
+    )
+
+def write_mysql(dataframe, database_name, table_name):
+    (
+        dataframe.write
+        .format("jdbc")
+        .option("url", mysql_url(database_name))
+        .option("dbtable", table_name)
+        .option("user", MYSQL_USER)
+        .option("password", MYSQL_PASSWORD)
+        .option("driver", MYSQL_DRIVER)
+        .option("batchsize", "1000")
+        .mode("append")
+        .save()
+    )
+
+print(spark.version)
+print(mysql_url("ecomsphere_oltp"))</code></pre>
+          </div>
+        </details>
+
+        <div class="warning"><strong>If the connection fails:</strong> confirm that MySQL is running on port <code>3306</code>, the password is correct, and the connector was shown in the PySpark startup messages.</div>
+      </section>
+
+      <section id="extract">
+        <h2>6. Read and inspect the OLTP tables</h2>
+        <p>Read each business subject separately. Do not create one large source join before the grain and purpose are clear.</p>
+
+        <details class="code-panel">
+          <summary>Run 3A in the PySpark shell - read all required OLTP tables</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>customer_status_df = read_mysql("ecomsphere_oltp", "customer_status")
+customer_df = read_mysql("ecomsphere_oltp", "customer")
+category_df = read_mysql("ecomsphere_oltp", "category")
+product_df = read_mysql("ecomsphere_oltp", "product")
+order_channel_df = read_mysql("ecomsphere_oltp", "order_channel")
+order_status_df = read_mysql("ecomsphere_oltp", "order_status")
+orders_df = read_mysql("ecomsphere_oltp", "orders")
+order_item_df = read_mysql("ecomsphere_oltp", "order_item")
+payment_method_df = read_mysql("ecomsphere_oltp", "payment_method")
+payment_status_df = read_mysql("ecomsphere_oltp", "payment_status")
+payment_df = read_mysql("ecomsphere_oltp", "payment")</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 3B in the PySpark shell - check counts and sample rows</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>source_tables = {
+    "customer_status": customer_status_df,
+    "customer": customer_df,
+    "category": category_df,
+    "product": product_df,
+    "order_channel": order_channel_df,
+    "order_status": order_status_df,
+    "orders": orders_df,
+    "order_item": order_item_df,
+    "payment_method": payment_method_df,
+    "payment_status": payment_status_df,
+    "payment": payment_df
+}
+
+for table_name, dataframe in source_tables.items():
+    print(f"{table_name}: {dataframe.count()} rows")
+
+orders_df.orderBy("order_id").show(20, truncate=False)
+order_item_df.orderBy("order_item_id").show(40, truncate=False)
+payment_df.orderBy("payment_id").show(30, truncate=False)</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 3C in the PySpark shell - prove why payment is a different grain</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>REVENUE_STATUSES = ["PAID", "SHIPPED", "DELIVERED"]
+
+eligible_orders_df = orders_df.filter(
+    F.col("order_status_code").isin(REVENUE_STATUSES)
+)
+
+eligible_items_df = (
+    order_item_df.alias("oi")
+    .join(
+        eligible_orders_df.alias("o"),
+        F.col("oi.order_id") == F.col("o.order_id"),
+        "inner"
+    )
+    .select(
+        F.col("oi.order_item_id"),
+        F.col("oi.order_id"),
+        F.col("oi.product_id"),
+        F.col("oi.quantity"),
+        F.col("oi.unit_price"),
+        F.col("oi.discount_amount"),
+        F.col("o.customer_id"),
+        F.col("o.order_date"),
+        F.col("o.order_channel_code"),
+        F.col("o.order_status_code")
+    )
+)
+
+payment_join_demo_df = (
+    eligible_items_df.alias("e")
+    .join(
+        payment_df.alias("pay"),
+        F.col("e.order_id") == F.col("pay.order_id"),
+        "inner"
+    )
+)
+
+incorrect_total = payment_join_demo_df.agg(
+    F.sum(
+        (F.col("e.quantity") * F.col("e.unit_price"))
+        - F.col("e.discount_amount")
+    ).alias("incorrect_net_sales")
+).first()["incorrect_net_sales"]
+
+print("Eligible order-item rows:", eligible_items_df.count())
+print("Rows after payment join:", payment_join_demo_df.count())
+print("Incorrect sales after payment join:", incorrect_total)</code></pre>
+          </div>
+        </details>
+
+        <div class="result"><strong>Expected proof:</strong> eligible sales contain <code>30</code> order-item rows. Joining payment attempts creates <code>42</code> rows and inflates net sales to <code>303834.00</code>. Payment is therefore not joined while building <code>fact_sales</code>.</div>
+      </section>
+
+      <section id="dimensions">
+        <h2>7. Build and load the dimensions</h2>
+
+        <h3>Customer decision</h3>
+        <p>Keep one row per customer. Replace the operational status code with readable status text. MySQL will generate <code>customer_key</code>.</p>
+
+        <details class="code-panel">
+          <summary>Run 4A in the PySpark shell - build dim_customer data</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>dim_customer_stage = (
+    customer_df.alias("c")
+    .join(
+        customer_status_df.alias("cs"),
+        F.col("c.customer_status_code")
+        == F.col("cs.customer_status_code"),
+        "inner"
+    )
+    .select(
+        F.col("c.customer_id"),
+        F.col("c.customer_name"),
+        F.col("c.city"),
+        F.col("c.country"),
+        F.col("cs.customer_status_name").alias("customer_status")
+    )
+    .dropDuplicates(["customer_id"])
+    .orderBy("customer_id")
+)
+
+dim_customer_stage.show(20, truncate=False)
+print("Customer dimension rows:", dim_customer_stage.count())</code></pre>
+          </div>
+        </details>
+
+        <h3>Product decision</h3>
+        <p>Keep one row per product. Copy category ID and category name into the same dimension. This is deliberate denormalization for simpler reports.</p>
+
+        <details class="code-panel">
+          <summary>Run 4B in the PySpark shell - build dim_product data</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>dim_product_stage = (
+    product_df.alias("p")
+    .join(
+        category_df.alias("cat"),
+        F.col("p.category_id") == F.col("cat.category_id"),
+        "inner"
+    )
+    .select(
+        F.col("p.product_id"),
+        F.col("p.product_name"),
+        F.col("cat.category_id"),
+        F.col("cat.category_name")
+    )
+    .dropDuplicates(["product_id"])
+    .orderBy("product_id")
+)
+
+dim_product_stage.show(20, truncate=False)
+print("Product dimension rows:", dim_product_stage.count())</code></pre>
+          </div>
+        </details>
+
+        <h3>Date and channel decisions</h3>
+        <p>The date key uses <code>yyyyMMdd</code>. Channel values come from the controlled lookup table, not from free text in a report.</p>
+
+        <details class="code-panel">
+          <summary>Run 4C in the PySpark shell - build dim_date and dim_channel data</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>dim_date_stage = (
+    orders_df
+    .select(F.col("order_date").alias("full_date"))
+    .distinct()
+    .withColumn(
+        "date_key",
+        F.date_format("full_date", "yyyyMMdd").cast("int")
+    )
+    .withColumn("day_number", F.dayofmonth("full_date"))
+    .withColumn("month_number", F.month("full_date"))
+    .withColumn("month_name", F.date_format("full_date", "MMMM"))
+    .withColumn("quarter_number", F.quarter("full_date"))
+    .withColumn("year_number", F.year("full_date"))
+    .select(
+        "date_key",
+        "full_date",
+        "day_number",
+        "month_number",
+        "month_name",
+        "quarter_number",
+        "year_number"
+    )
+    .orderBy("full_date")
+)
+
+dim_channel_stage = (
+    order_channel_df
+    .select(
+        F.col("order_channel_code").alias("channel_code"),
+        F.col("order_channel_name").alias("channel_name")
+    )
+    .dropDuplicates(["channel_code"])
+    .orderBy("channel_code")
+)
+
+dim_date_stage.show(30, truncate=False)
+dim_channel_stage.show(10, truncate=False)
+print("Date dimension rows:", dim_date_stage.count())
+print("Channel dimension rows:", dim_channel_stage.count())</code></pre>
+          </div>
+        </details>
+
+        <div class="note"><strong>Date-dimension scope:</strong> this practice loads the 18 dates found in the source orders. A production date dimension usually contains every calendar date for the required reporting period.</div>
+
+        <h3>Load dimensions before the fact</h3>
+        <p>The dimension DataFrames do not include the MySQL <code>AUTO_INCREMENT</code> keys. MySQL generates those keys during the append.</p>
+
+        <details class="code-panel">
+          <summary>Run 4D in the PySpark shell - write the four dimensions</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>write_mysql(dim_customer_stage, "ecomsphere_olap", "dim_customer")
+write_mysql(dim_product_stage, "ecomsphere_olap", "dim_product")
+write_mysql(dim_date_stage, "ecomsphere_olap", "dim_date")
+write_mysql(dim_channel_stage, "ecomsphere_olap", "dim_channel")
+
+print("All dimensions were written to MySQL.")</code></pre>
+          </div>
+        </details>
+
+        <h3>Read generated surrogate keys</h3>
+        <p>The fact needs the target surrogate keys. Read the dimensions back and use the source business keys for the lookup.</p>
+
+        <details class="code-panel">
+          <summary>Run 4E in the PySpark shell - read target dimensions back</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>dim_customer_db = read_mysql("ecomsphere_olap", "dim_customer")
+dim_product_db = read_mysql("ecomsphere_olap", "dim_product")
+dim_date_db = read_mysql("ecomsphere_olap", "dim_date")
+dim_channel_db = read_mysql("ecomsphere_olap", "dim_channel")
+
+dim_customer_db.orderBy("customer_key").show(20, truncate=False)
+dim_product_db.orderBy("product_key").show(20, truncate=False)
+dim_date_db.orderBy("date_key").show(30, truncate=False)
+dim_channel_db.orderBy("channel_key").show(10, truncate=False)</code></pre>
+          </div>
+        </details>
+      </section>
+
+      <section id="fact">
+        <h2>8. Build and validate the sales fact</h2>
+
+        <h3>Fact decisions applied in code</h3>
+        <ul>
+          <li>Keep only <code>PAID</code>, <code>SHIPPED</code> and <code>DELIVERED</code> orders.</li>
+          <li>Keep exactly one row per <code>order_item_id</code>.</li>
+          <li>Look up customer, product, date and channel keys.</li>
+          <li>Keep <code>order_id</code> directly in the fact.</li>
+          <li>Calculate gross, discount and net values once.</li>
+          <li>Do not join payment attempts.</li>
+        </ul>
+
+        <details class="code-panel">
+          <summary>Run 5A in the PySpark shell - join dimensions and build fact_sales</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>fact_lookup_df = (
+    eligible_items_df.alias("e")
+    .join(
+        dim_customer_db.alias("dc"),
+        F.col("e.customer_id") == F.col("dc.customer_id"),
+        "left"
+    )
+    .join(
+        dim_product_db.alias("dp"),
+        F.col("e.product_id") == F.col("dp.product_id"),
+        "left"
+    )
+    .join(
+        dim_date_db.alias("dd"),
+        F.col("e.order_date") == F.col("dd.full_date"),
+        "left"
+    )
+    .join(
+        dim_channel_db.alias("dch"),
+        F.col("e.order_channel_code") == F.col("dch.channel_code"),
+        "left"
+    )
+)
+
+gross_amount = (
+    F.col("e.quantity") * F.col("e.unit_price")
+).cast(DecimalType(14, 2))
+
+discount_amount = F.col("e.discount_amount").cast(
+    DecimalType(14, 2)
+)
+
+net_amount = (gross_amount - discount_amount).cast(
+    DecimalType(14, 2)
+)
+
+fact_sales_stage = (
+    fact_lookup_df
+    .select(
+        F.col("e.order_item_id"),
+        F.col("e.order_id"),
+        F.col("dc.customer_key"),
+        F.col("dp.product_key"),
+        F.col("dd.date_key"),
+        F.col("dch.channel_key"),
+        F.col("e.quantity"),
+        F.col("e.unit_price").cast(DecimalType(12, 2)).alias("unit_price"),
+        gross_amount.alias("gross_sales_amount"),
+        discount_amount.alias("discount_amount"),
+        net_amount.alias("net_sales_amount")
+    )
+    .orderBy("order_item_id")
+)
+
+fact_sales_stage.show(40, truncate=False)
+fact_sales_stage.printSchema()</code></pre>
+          </div>
+        </details>
+
+        <h3>Validate before writing</h3>
+        <p>A failed check stops the load. This prevents incomplete or multiplied fact data from reaching MySQL.</p>
+
+        <details class="code-panel">
+          <summary>Run 5B in the PySpark shell - execute all fact checks</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>source_fact_rows = eligible_items_df.count()
+fact_rows = fact_sales_stage.count()
+
+duplicate_order_items = (
+    fact_sales_stage
+    .groupBy("order_item_id")
+    .count()
+    .filter(F.col("count") &gt; 1)
+    .count()
+)
+
+missing_dimension_keys = (
+    fact_sales_stage
+    .filter(
+        F.col("customer_key").isNull()
+        | F.col("product_key").isNull()
+        | F.col("date_key").isNull()
+        | F.col("channel_key").isNull()
+    )
+    .count()
+)
+
+source_totals = eligible_items_df.agg(
+    F.sum(
+        F.col("quantity") * F.col("unit_price")
+    ).cast(DecimalType(14, 2)).alias("gross_sales"),
+    F.sum("discount_amount").cast(
+        DecimalType(14, 2)
+    ).alias("discount"),
+    F.sum(
+        (F.col("quantity") * F.col("unit_price"))
+        - F.col("discount_amount")
+    ).cast(DecimalType(14, 2)).alias("net_sales")
+).first()
+
+fact_totals = fact_sales_stage.agg(
+    F.sum("gross_sales_amount").alias("gross_sales"),
+    F.sum("discount_amount").alias("discount"),
+    F.sum("net_sales_amount").alias("net_sales")
+).first()
+
+measure_mismatches = (
+    fact_sales_stage
+    .filter(
+        (F.col("gross_sales_amount") - F.col("discount_amount"))
+        != F.col("net_sales_amount")
+    )
+    .count()
+)
+
+checks = {
+    "source_fact_rows": source_fact_rows == 30,
+    "source_and_fact_row_counts_match": source_fact_rows == fact_rows,
+    "no_duplicate_order_items": duplicate_order_items == 0,
+    "no_missing_dimension_keys": missing_dimension_keys == 0,
+    "gross_sales_match": source_totals["gross_sales"] == fact_totals["gross_sales"],
+    "discounts_match": source_totals["discount"] == fact_totals["discount"],
+    "net_sales_match": source_totals["net_sales"] == fact_totals["net_sales"],
+    "measure_formula_is_valid": measure_mismatches == 0
+}
+
+for check_name, passed in checks.items():
+    print(check_name, "PASS" if passed else "FAIL")
+
+print("Source totals:", source_totals.asDict())
+print("Fact totals:", fact_totals.asDict())
+
+failed_checks = [
+    check_name
+    for check_name, passed in checks.items()
+    if not passed
+]
+
+if failed_checks:
+    raise ValueError(f"Fact load stopped. Failed checks: {failed_checks}")
+
+print("All checks passed. The fact is ready to load.")</code></pre>
+          </div>
+        </details>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Validation</th><th>Expected result</th></tr></thead>
+            <tbody>
+              <tr><td>Revenue-eligible order-item rows</td><td><code>30</code></td></tr>
+              <tr><td>Fact rows</td><td><code>30</code></td></tr>
+              <tr><td>Duplicate order items</td><td><code>0</code></td></tr>
+              <tr><td>Missing dimension keys</td><td><code>0</code></td></tr>
+              <tr><td>Gross sales</td><td><code>244154.00</code></td></tr>
+              <tr><td>Discount</td><td><code>11250.00</code></td></tr>
+              <tr><td>Net sales</td><td><code>232904.00</code></td></tr>
+              <tr><td>Measure mismatches</td><td><code>0</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="load">
+        <h2>9. Load and verify the OLAP model</h2>
+        <p>Write the fact only after every validation has passed.</p>
+
+        <details class="code-panel">
+          <summary>Run 6A in the PySpark shell - write fact_sales</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>write_mysql(fact_sales_stage, "ecomsphere_olap", "fact_sales")
+
+print("fact_sales was written to MySQL.")</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 6B in the PySpark shell - read the final fact back</summary>
+          <div class="code-wrap">
+            <div class="code-label">PySpark</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>fact_sales_db = read_mysql("ecomsphere_olap", "fact_sales")
+
+fact_sales_db.orderBy("sales_key").show(40, truncate=False)
+
+fact_sales_db.agg(
+    F.count("*").alias("fact_rows"),
+    F.sum("gross_sales_amount").alias("gross_sales"),
+    F.sum("discount_amount").alias("discount"),
+    F.sum("net_sales_amount").alias("net_sales")
+).show(truncate=False)</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 6C in MySQL Workbench - final database reconciliation</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_olap;
+
+SELECT 'dim_customer' AS table_name, COUNT(*) AS row_count FROM dim_customer
+UNION ALL SELECT 'dim_product', COUNT(*) FROM dim_product
+UNION ALL SELECT 'dim_date', COUNT(*) FROM dim_date
+UNION ALL SELECT 'dim_channel', COUNT(*) FROM dim_channel
+UNION ALL SELECT 'fact_sales', COUNT(*) FROM fact_sales;
+
+SELECT
+    SUM(gross_sales_amount) AS gross_sales,
+    SUM(discount_amount) AS discount,
+    SUM(net_sales_amount) AS net_sales
+FROM fact_sales;
+
+SELECT COUNT(*) AS missing_dimension_keys
+FROM fact_sales AS fs
+LEFT JOIN dim_customer AS dc
+    ON fs.customer_key = dc.customer_key
+LEFT JOIN dim_product AS dp
+    ON fs.product_key = dp.product_key
+LEFT JOIN dim_date AS dd
+    ON fs.date_key = dd.date_key
+LEFT JOIN dim_channel AS dch
+    ON fs.channel_key = dch.channel_key
+WHERE dc.customer_key IS NULL
+   OR dp.product_key IS NULL
+   OR dd.date_key IS NULL
+   OR dch.channel_key IS NULL;
+
+SELECT COUNT(*) AS duplicate_order_items
+FROM
+(
+    SELECT order_item_id
+    FROM fact_sales
+    GROUP BY order_item_id
+    HAVING COUNT(*) &gt; 1
+) AS duplicates;</code></pre>
+          </div>
+        </details>
+
+        <div class="result"><strong>Final row counts:</strong> <code>dim_customer = 10</code>, <code>dim_product = 12</code>, <code>dim_date = 18</code>, <code>dim_channel = 5</code> and <code>fact_sales = 30</code>.</div>
+      </section>
+
+      <section id="analytics">
+        <h2>10. Run analytical queries in MySQL</h2>
+        <p>The target queries start from the fact and join only the dimensions required by the report.</p>
+
+        <details class="code-panel">
+          <summary>Run 7A - monthly sales</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>USE ecomsphere_olap;
+
+SELECT
+    dd.year_number,
+    dd.month_number,
+    dd.month_name,
+    SUM(fs.quantity) AS quantity_sold,
+    SUM(fs.net_sales_amount) AS net_sales
+FROM fact_sales AS fs
+JOIN dim_date AS dd
+    ON fs.date_key = dd.date_key
+GROUP BY
+    dd.year_number,
+    dd.month_number,
+    dd.month_name
+ORDER BY
+    dd.year_number,
+    dd.month_number;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 7B - sales by country and category</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT
+    dc.country,
+    dp.category_name,
+    SUM(fs.quantity) AS quantity_sold,
+    SUM(fs.net_sales_amount) AS net_sales
+FROM fact_sales AS fs
+JOIN dim_customer AS dc
+    ON fs.customer_key = dc.customer_key
+JOIN dim_product AS dp
+    ON fs.product_key = dp.product_key
+GROUP BY
+    dc.country,
+    dp.category_name
+ORDER BY
+    dc.country,
+    net_sales DESC;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 7C - sales by channel</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT
+    dch.channel_name,
+    COUNT(DISTINCT fs.order_id) AS order_count,
+    SUM(fs.quantity) AS quantity_sold,
+    SUM(fs.net_sales_amount) AS net_sales
+FROM fact_sales AS fs
+JOIN dim_channel AS dch
+    ON fs.channel_key = dch.channel_key
+GROUP BY dch.channel_name
+ORDER BY net_sales DESC;</code></pre>
+          </div>
+        </details>
+
+        <details class="code-panel">
+          <summary>Run 7D - top products by net sales</summary>
+          <div class="code-wrap">
+            <div class="code-label">MySQL</div>
+            <button class="copy-code" type="button">Copy</button>
+            <pre><code>SELECT
+    dp.product_name,
+    dp.category_name,
+    SUM(fs.quantity) AS quantity_sold,
+    SUM(fs.gross_sales_amount) AS gross_sales,
+    SUM(fs.discount_amount) AS discount,
+    SUM(fs.net_sales_amount) AS net_sales
+FROM fact_sales AS fs
+JOIN dim_product AS dp
+    ON fs.product_key = dp.product_key
+GROUP BY
+    dp.product_name,
+    dp.category_name
+ORDER BY net_sales DESC
+LIMIT 5;</code></pre>
+          </div>
+        </details>
+      </section>
+
+      <section id="checkpoint">
+        <h2>11. Pipeline checkpoint</h2>
+
+        <ul class="checklist">
+          <li>Both MySQL databases exist.</li>
+          <li>The OLTP source contains normalized tables with valid foreign keys.</li>
+          <li>PySpark reads all required source tables through JDBC.</li>
+          <li>Customer status is flattened into <code>dim_customer</code>.</li>
+          <li>Category is flattened into <code>dim_product</code>.</li>
+          <li>MySQL generates the dimension surrogate keys.</li>
+          <li>PySpark reads the generated keys back before building the fact.</li>
+          <li>Only revenue-eligible orders enter <code>fact_sales</code>.</li>
+          <li>Payment attempts are kept outside the sales fact.</li>
+          <li>The fact contains exactly 30 unique order-item rows.</li>
+          <li>Source and target net sales both equal <code>232904.00</code>.</li>
+          <li>Analytical reports run from the MySQL star schema.</li>
+        </ul>
+
+        <div class="note"><strong>What this conversion proves:</strong> an OLAP model is not created by renaming OLTP tables. The pipeline applies business rules, changes table shapes, creates reporting attributes, calculates measures and connects the fact to dimension surrogate keys.</div>
+      </section>
+    </main>
+  </div>
+
+  <footer>EcomSphere · Session 4 · OLTP to OLAP with PySpark and MySQL</footer>
+
+  <script>
+    const codePanels = Array.from(document.querySelectorAll('details.code-panel'));
+
+    document.getElementById('expand-code').addEventListener('click', () => {
+      codePanels.forEach((panel) => { panel.open = true; });
+    });
+
+    document.getElementById('collapse-code').addEventListener('click', () => {
+      codePanels.forEach((panel) => { panel.open = false; });
+    });
+
+    document.querySelectorAll('.copy-code').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const code = button.closest('.code-wrap').querySelector('code').innerText;
+        const original = button.textContent;
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(code);
+          } else {
+            const helper = document.createElement('textarea');
+            helper.value = code;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'fixed';
+            helper.style.opacity = '0';
+            document.body.appendChild(helper);
+            helper.select();
+            document.execCommand('copy');
+            helper.remove();
+          }
+          button.textContent = 'Copied';
+        } catch (error) {
+          button.textContent = 'Copy failed';
+        }
+        setTimeout(() => { button.textContent = original; }, 1600);
+      });
+    });
+
+    const themeButton = document.getElementById('theme-toggle');
+    themeButton.addEventListener('click', () => {
+      const isDark = document.documentElement.dataset.theme === 'dark';
+      document.documentElement.dataset.theme = isDark ? 'light' : 'dark';
+      themeButton.textContent = isDark ? 'Dark theme' : 'Light theme';
+      themeButton.setAttribute('aria-pressed', String(!isDark));
+    });
+  </script>
+</body>
+</html>
