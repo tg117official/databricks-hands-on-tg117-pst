@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Session 5 - SCD Types 1, 2 and 3 with PySpark and MySQL</title>
+  <style>
+    :root {
+      --bg: #eef3f9;
+      --surface: #ffffff;
+      --surface-2: #f5f8fc;
+      --text: #172033;
+      --muted: #56657b;
+      --line: #d9e2ef;
+      --primary: #155eef;
+      --primary-dark: #0d43ad;
+      --green: #087a63;
+      --green-soft: #e8f8f3;
+      --blue-soft: #eaf2ff;
+      --amber: #9a5b00;
+      --amber-soft: #fff6df;
+      --red: #b42318;
+      --red-soft: #fff0ee;
+      --code-bg: #101827;
+      --code-text: #e8eef8;
+      --shadow: 0 12px 35px rgba(24, 39, 75, 0.08);
+    }
+    [data-theme="dark"] {
+      --bg: #0b1220;
+      --surface: #121c2d;
+      --surface-2: #182337;
+      --text: #edf3ff;
+      --muted: #b1bdd0;
+      --line: #2b3a52;
+      --primary: #78a7ff;
+      --primary-dark: #a9c6ff;
+      --green: #62d8bd;
+      --green-soft: #12392f;
+      --blue-soft: #172e54;
+      --amber: #ffc766;
+      --amber-soft: #3d2c0e;
+      --red: #ff9b91;
+      --red-soft: #401f21;
+      --code-bg: #080d17;
+      --code-text: #edf3ff;
+      --shadow: 0 14px 40px rgba(0, 0, 0, 0.24);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      line-height: 1.65;
+    }
+    a { color: var(--primary); }
+    code, pre { font-family: "Cascadia Code", Consolas, "Courier New", monospace; }
+    code:not(pre code) {
+      padding: 0.12rem 0.34rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface-2);
+      font-size: 0.92em;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.65rem max(1rem, calc((100% - 1180px) / 2));
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(12px);
+    }
+    .topbar-title { font-size: 0.9rem; font-weight: 750; color: var(--muted); }
+    .topbar-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.48rem 0.72rem;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.84rem;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--primary); }
+    .hero {
+      padding: 3.4rem 1rem 2.6rem;
+      color: #ffffff;
+      background: linear-gradient(125deg, #0b2f6f, #155eef 55%, #087a63);
+    }
+    .hero-inner, main { max-width: 1180px; margin: 0 auto; }
+    .eyebrow {
+      margin: 0 0 0.5rem;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.84;
+    }
+    h1 { margin: 0; max-width: 900px; font-size: clamp(2rem, 5vw, 3.7rem); line-height: 1.08; }
+    .lead { max-width: 900px; margin: 1rem 0 0; font-size: clamp(1rem, 2vw, 1.2rem); opacity: 0.95; }
+    .badges { display: flex; gap: 0.55rem; flex-wrap: wrap; margin-top: 1.25rem; }
+    .badge { padding: 0.35rem 0.68rem; border: 1px solid rgba(255,255,255,0.32); border-radius: 999px; background: rgba(255,255,255,0.12); font-size: 0.84rem; }
+    main { padding: 1.2rem 1rem 4rem; }
+    section {
+      margin: 1.15rem 0;
+      padding: clamp(1.1rem, 3vw, 2rem);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    h2 { margin: 0 0 0.8rem; color: var(--primary-dark); font-size: clamp(1.35rem, 3vw, 1.9rem); }
+    h3 { margin: 1.5rem 0 0.55rem; font-size: 1.15rem; }
+    p { margin: 0.55rem 0 0.9rem; }
+    ul, ol { padding-left: 1.35rem; }
+    li + li { margin-top: 0.32rem; }
+    .index-grid, .card-grid, .three-grid {
+      display: grid;
+      gap: 0.85rem;
+    }
+    .index-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .three-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .index-item, .card {
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    .index-item a { font-weight: 750; text-decoration: none; }
+    .index-item span, .card span { display: block; margin-top: 0.18rem; color: var(--muted); font-size: 0.92rem; }
+    .card strong { color: var(--primary-dark); }
+    .note, .warning, .result {
+      margin: 1rem 0;
+      padding: 0.9rem 1rem;
+      border-left: 4px solid;
+      border-radius: 9px;
+    }
+    .note { border-color: var(--primary); background: var(--blue-soft); }
+    .warning { border-color: var(--amber); background: var(--amber-soft); }
+    .result { border-color: var(--green); background: var(--green-soft); }
+    .table-wrap { overflow-x: auto; margin: 1rem 0; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; min-width: 680px; border-collapse: collapse; }
+    th, td { padding: 0.72rem 0.82rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--surface-2); font-size: 0.88rem; }
+    tr:last-child td { border-bottom: 0; }
+    details.code-panel {
+      margin: 1rem 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    details.code-panel > summary {
+      padding: 0.85rem 1rem;
+      font-weight: 750;
+      cursor: pointer;
+      list-style-position: inside;
+    }
+    details.code-panel[open] > summary { border-bottom: 1px solid var(--line); }
+    .code-wrap { position: relative; background: var(--code-bg); }
+    .code-label { padding: 0.55rem 1rem; color: #aebbd0; font-size: 0.76rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .copy-code { position: absolute; top: 0.38rem; right: 0.55rem; border-color: #40506b; background: #1b2940; color: #ffffff; }
+    pre { margin: 0; padding: 1rem; overflow-x: auto; color: var(--code-text); font-size: 0.86rem; line-height: 1.55; tab-size: 4; }
+    .diagram {
+      margin: 1.15rem 0;
+      padding: 1rem;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #f8fbff;
+    }
+    [data-theme="dark"] .diagram { background: #101827; }
+    .diagram svg { display: block; width: 100%; min-width: 800px; height: auto; }
+    .diagram figcaption { margin-top: 0.7rem; color: var(--muted); text-align: center; font-size: 0.9rem; }
+    .box { fill: #ffffff; stroke: #155eef; stroke-width: 2; }
+    .box-green { fill: #ffffff; stroke: #087a63; stroke-width: 2.5; }
+    .head { fill: #155eef; }
+    .head-green { fill: #087a63; }
+    .svg-title { fill: #ffffff; font: 700 15px Inter, sans-serif; }
+    .svg-text { fill: #172033; font: 13px Inter, sans-serif; }
+    .svg-code { fill: #172033; font: 13px Consolas, monospace; }
+    .arrow-line { stroke: #56657b; stroke-width: 2.5; fill: none; }
+    .arrow-fill { fill: #56657b; }
+    [data-theme="dark"] .box, [data-theme="dark"] .box-green { fill: #182337; }
+    [data-theme="dark"] .box { stroke: #78a7ff; }
+    [data-theme="dark"] .box-green { stroke: #62d8bd; }
+    [data-theme="dark"] .head { fill: #315d9f; }
+    [data-theme="dark"] .head-green { fill: #176d5c; }
+    [data-theme="dark"] .svg-text, [data-theme="dark"] .svg-code { fill: #edf3ff; }
+    [data-theme="dark"] .arrow-line { stroke: #b1bdd0; }
+    [data-theme="dark"] .arrow-fill { fill: #b1bdd0; }
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.8rem;
+      margin: 1rem 0;
+    }
+    .timeline > div { padding: 0.9rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+    .timeline strong { display: block; color: var(--primary-dark); }
+    .timeline small { color: var(--muted); }
+    .pill { display: inline-block; margin: 0.12rem; padding: 0.15rem 0.48rem; border-radius: 999px; font-size: 0.78rem; font-weight: 750; }
+    .new { color: #075f4d; background: #d9f5ed; }
+    .changed { color: #7a4600; background: #ffedbd; }
+    .unchanged { color: #35425a; background: #e8edf5; }
+    footer { max-width: 1180px; margin: 0 auto; padding: 0 1rem 2.5rem; color: var(--muted); text-align: center; }
+    @media (max-width: 820px) {
+      .index-grid, .card-grid, .three-grid, .timeline { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; }
+      .topbar-title { display: none; }
+      section { border-radius: 12px; }
+      pre { font-size: 0.8rem; }
+    }
+    @media print {
+      .topbar, .copy-code { display: none !important; }
+      body { background: #ffffff; }
+      section { box-shadow: none; break-inside: avoid; }
+      details.code-panel { break-inside: avoid; }
+      details.code-panel:not([open]) > .code-wrap { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-title">SCD Types 1, 2 and 3</div>
+    <div class="topbar-actions">
+      <button id="expandAll" type="button">Expand all code</button>
+      <button id="collapseAll" type="button">Collapse all code</button>
+      <button id="themeToggle" type="button" aria-pressed="false">Dark theme</button>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Data Modelling • Session 5</p>
+      <h1>Slowly Changing Dimensions with PySpark and MySQL</h1>
+      <p class="lead">Start with the same customer snapshot, process two incremental batches, and compare how SCD Type 1, Type 2 and Type 3 store change.</p>
+      <div class="badges">
+        <span class="badge">Local PySpark shell</span>
+        <span class="badge">MySQL 8</span>
+        <span class="badge">10 initial customers</span>
+        <span class="badge">2 incremental batches per SCD type</span>
+        <span class="badge">Complete validation</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="index">
+      <h2>Session flow</h2>
+      <div class="index-grid">
+        <div class="index-item"><a href="#problem">1. Understand the change problem</a><span>See why one storage rule cannot meet every history requirement.</span></div>
+        <div class="index-item"><a href="#comparison">2. Compare the three SCD types</a><span>Understand overwrite, full history and limited history.</span></div>
+        <div class="index-item"><a href="#mysql-setup">3. Create the MySQL destination</a><span>Create three independent dimensions.</span></div>
+        <div class="index-item"><a href="#pyspark-setup">4. Start PySpark and connect</a><span>Use the existing shell session and MySQL JDBC.</span></div>
+        <div class="index-item"><a href="#data">5. Create the data batches</a><span>Build one initial snapshot and two incremental DataFrames.</span></div>
+        <div class="index-item"><a href="#initial-load">6. Load the initial snapshot</a><span>Give all three dimensions the same starting point.</span></div>
+        <div class="index-item"><a href="#type1">7. Apply SCD Type 1 twice</a><span>Overwrite old values without creating history.</span></div>
+        <div class="index-item"><a href="#type2">8. Apply SCD Type 2 twice</a><span>Expire old rows and insert new versions.</span></div>
+        <div class="index-item"><a href="#type3">9. Apply SCD Type 3 twice</a><span>Keep the current city and only one previous city.</span></div>
+        <div class="index-item"><a href="#final-checks">10. Reconcile and decide</a><span>Check counts, history rules and suitable use cases.</span></div>
+      </div>
+    </section>
+
+    <section id="problem">
+      <h2>1. A customer record changes</h2>
+      <p>A dimension contains descriptive business data. Customer city, email and membership tier can change after the first load. The warehouse must decide what to do with the old value.</p>
+
+      <div class="timeline">
+        <div><strong>Initial snapshot</strong><small>10 customers loaded on 1 January 2026.</small></div>
+        <div><strong>Incremental Batch 1</strong><small>8 incoming rows on 1 February 2026.</small></div>
+        <div><strong>Incremental Batch 2</strong><small>8 incoming rows on 1 March 2026.</small></div>
+      </div>
+
+      <div class="card-grid">
+        <div class="card"><strong>Business key</strong><span><code>customer_id</code> identifies the same customer across every batch.</span></div>
+        <div class="card"><strong>Surrogate key</strong><span><code>customer_key</code> is generated inside the warehouse. Type 2 creates a new key for a new version.</span></div>
+        <div class="card"><strong>Changed row</strong><span>The business key already exists, but at least one tracked attribute is different.</span></div>
+        <div class="card"><strong>Idempotent rerun</strong><span>Running the same batch again must not create another change or duplicate row.</span></div>
+      </div>
+
+      <div class="note"><strong>Scope:</strong> the incoming rows are already available as incremental data. This session does not repeat CDC extraction. It focuses on applying the rows to dimensions.</div>
+    </section>
+
+    <section id="comparison">
+      <h2>2. Three ways to store the change</h2>
+      <figure class="diagram">
+        <svg viewBox="0 0 1180 500" role="img" aria-labelledby="scd-title scd-desc">
+          <title id="scd-title">Visual comparison of SCD Type 1, Type 2 and Type 3</title>
+          <desc id="scd-desc">Three panels show an overwritten city, multiple dated rows, and current plus previous city columns.</desc>
+
+          <rect class="box" x="30" y="40" width="350" height="395" rx="14"/>
+          <path class="head" d="M44 40h322a14 14 0 0 1 14 14v54H30V54a14 14 0 0 1 14-14z"/>
+          <text class="svg-title" x="205" y="75" text-anchor="middle">SCD Type 1 • overwrite</text>
+          <text class="svg-text" x="60" y="145">Before Batch 1</text>
+          <text class="svg-code" x="60" y="175">C003 | Mumbai</text>
+          <path class="arrow-line" d="M145 195v45"/>
+          <path class="arrow-fill" d="M137 235l8 12 8-12z"/>
+          <text class="svg-text" x="60" y="280">After Batch 2</text>
+          <text class="svg-code" x="60" y="310">C003 | Hyderabad</text>
+          <text class="svg-text" x="60" y="355">Mumbai and Bengaluru are gone.</text>
+          <text class="svg-text" x="60" y="385">Only the latest value remains.</text>
+
+          <rect class="box-green" x="415" y="40" width="350" height="395" rx="14"/>
+          <path class="head-green" d="M429 40h322a14 14 0 0 1 14 14v54H415V54a14 14 0 0 1 14-14z"/>
+          <text class="svg-title" x="590" y="75" text-anchor="middle">SCD Type 2 • full history</text>
+          <text class="svg-code" x="445" y="155">v1 | Mumbai</text>
+          <text class="svg-code" x="445" y="195">01-Jan to 31-Jan | old</text>
+          <text class="svg-code" x="445" y="250">v2 | Bengaluru</text>
+          <text class="svg-code" x="445" y="290">01-Feb to 28-Feb | old</text>
+          <text class="svg-code" x="445" y="345">v3 | Hyderabad</text>
+          <text class="svg-code" x="445" y="385">01-Mar onward | current</text>
+
+          <rect class="box" x="800" y="40" width="350" height="395" rx="14"/>
+          <path class="head" d="M814 40h322a14 14 0 0 1 14 14v54H800V54a14 14 0 0 1 14-14z"/>
+          <text class="svg-title" x="975" y="75" text-anchor="middle">SCD Type 3 • limited history</text>
+          <text class="svg-text" x="830" y="155">After Batch 1</text>
+          <text class="svg-code" x="830" y="190">previous_city = Mumbai</text>
+          <text class="svg-code" x="830" y="225">current_city  = Bengaluru</text>
+          <text class="svg-text" x="830" y="285">After Batch 2</text>
+          <text class="svg-code" x="830" y="320">previous_city = Bengaluru</text>
+          <text class="svg-code" x="830" y="355">current_city  = Hyderabad</text>
+          <text class="svg-text" x="830" y="400">The oldest value, Mumbai, is lost.</text>
+        </svg>
+        <figcaption>The same change is stored differently because each SCD type answers a different business need.</figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>Rule</th><th>History kept</th><th>Common use</th></tr></thead>
+          <tbody>
+            <tr><td>SCD Type 1</td><td>Update the existing row.</td><td>None</td><td>Corrected email, spelling or phone number</td></tr>
+            <tr><td>SCD Type 2</td><td>Expire the current row and insert a new version.</td><td>Complete history</td><td>Membership tier, risk group or sales region</td></tr>
+            <tr><td>SCD Type 3</td><td>Move the current value to a previous-value column.</td><td>One previous value</td><td>Reports that compare only current and previous assignment</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="mysql-setup">
+      <h2>3. Create the MySQL destination</h2>
+      <p>Run this setup once in MySQL Workbench. Each SCD type has its own table, so one example cannot change the result of another example.</p>
+
+      <details class="code-panel">
+        <summary>Run 1A in MySQL Workbench - create the database and three dimensions</summary>
+        <div class="code-wrap">
+          <div class="code-label">MySQL</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>DROP DATABASE IF EXISTS scd_customer_demo;
+
+CREATE DATABASE scd_customer_demo
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+
+USE scd_customer_demo;
+
+CREATE TABLE dim_customer_type1
+(
+    customer_key   INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id    VARCHAR(10) NOT NULL,
+    customer_name  VARCHAR(100) NOT NULL,
+    city           VARCHAR(80) NOT NULL,
+    email          VARCHAR(120) NOT NULL,
+    membership_tier VARCHAR(20) NOT NULL,
+    updated_at     DATE NOT NULL,
+
+    CONSTRAINT uq_customer_type1_id UNIQUE (customer_id)
+) ENGINE = InnoDB;
+
+CREATE TABLE dim_customer_type2
+(
+    customer_key    INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id     VARCHAR(10) NOT NULL,
+    customer_name   VARCHAR(100) NOT NULL,
+    city            VARCHAR(80) NOT NULL,
+    email           VARCHAR(120) NOT NULL,
+    membership_tier VARCHAR(20) NOT NULL,
+    effective_from  DATE NOT NULL,
+    effective_to    DATE NULL,
+    is_current      TINYINT NOT NULL,
+    version_number  INT NOT NULL,
+
+    CONSTRAINT uq_customer_type2_version
+        UNIQUE (customer_id, version_number),
+    CONSTRAINT chk_customer_type2_current
+        CHECK (is_current IN (0, 1)),
+    CONSTRAINT chk_customer_type2_dates
+        CHECK (
+            effective_to IS NULL
+            OR effective_to &gt;= effective_from
+        )
+) ENGINE = InnoDB;
+
+CREATE INDEX idx_customer_type2_current
+    ON dim_customer_type2 (customer_id, is_current);
+
+CREATE TABLE dim_customer_type3
+(
+    customer_key    INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id     VARCHAR(10) NOT NULL,
+    customer_name   VARCHAR(100) NOT NULL,
+    current_city    VARCHAR(80) NOT NULL,
+    previous_city   VARCHAR(80) NULL,
+    email           VARCHAR(120) NOT NULL,
+    membership_tier VARCHAR(20) NOT NULL,
+    updated_at      DATE NOT NULL,
+
+    CONSTRAINT uq_customer_type3_id UNIQUE (customer_id)
+) ENGINE = InnoDB;
+
+SHOW TABLES;</code></pre>
+        </div>
+      </details>
+
+      <div class="warning"><strong>Fresh start:</strong> the first statement removes only the practice database named <code>scd_customer_demo</code>. Do not change it to the name of another database.</div>
+    </section>
+
+    <section id="pyspark-setup">
+      <h2>4. Start PySpark and connect to MySQL</h2>
+      <p>Start a new PySpark shell with the MySQL JDBC driver. The shell already provides the variable <code>spark</code>, so no Spark session object is created.</p>
+
+      <details class="code-panel">
+        <summary>Run 2A in PowerShell, Command Prompt or a terminal - start PySpark</summary>
+        <div class="code-wrap">
+          <div class="code-label">Terminal</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>pyspark --packages com.mysql:mysql-connector-j:8.4.0</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Optional fallback - start with a Connector/J JAR already stored locally</summary>
+        <div class="code-wrap">
+          <div class="code-label">Terminal</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code># Windows example
+pyspark --jars "C:\mysql-jdbc\mysql-connector-j-8.4.0.jar"
+
+# Linux example
+pyspark --jars "/opt/mysql-jdbc/mysql-connector-j-8.4.0.jar"</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Run 2B in the PySpark shell - imports, JDBC settings and helper functions</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>from datetime import date
+from getpass import getpass
+
+from pyspark.sql import functions as F
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    DateType
+)
+
+MYSQL_HOST = "localhost"
+MYSQL_PORT = "3306"
+MYSQL_DATABASE = "scd_customer_demo"
+MYSQL_USER = "root"
+MYSQL_PASSWORD = getpass("Enter the local MySQL password: ")
+MYSQL_DRIVER = "com.mysql.cj.jdbc.Driver"
+
+JDBC_URL = (
+    f"jdbc:mysql://{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
+    "?useSSL=false"
+    "&amp;allowPublicKeyRetrieval=true"
+    "&amp;serverTimezone=UTC"
+)
+
+def read_mysql(table_name):
+    return (
+        spark.read
+        .format("jdbc")
+        .option("url", JDBC_URL)
+        .option("dbtable", table_name)
+        .option("user", MYSQL_USER)
+        .option("password", MYSQL_PASSWORD)
+        .option("driver", MYSQL_DRIVER)
+        .load()
+    )
+
+def write_mysql_append(dataframe, table_name):
+    (
+        dataframe.coalesce(1)
+        .write
+        .format("jdbc")
+        .option("url", JDBC_URL)
+        .option("dbtable", table_name)
+        .option("user", MYSQL_USER)
+        .option("password", MYSQL_PASSWORD)
+        .option("driver", MYSQL_DRIVER)
+        .option("batchsize", "1000")
+        .mode("append")
+        .save()
+    )
+
+def write_mysql_stage(dataframe, table_name):
+    (
+        dataframe.coalesce(1)
+        .write
+        .format("jdbc")
+        .option("url", JDBC_URL)
+        .option("dbtable", table_name)
+        .option("user", MYSQL_USER)
+        .option("password", MYSQL_PASSWORD)
+        .option("driver", MYSQL_DRIVER)
+        .option("batchsize", "1000")
+        .mode("overwrite")
+        .save()
+    )
+
+def execute_mysql_transaction(sql_statements):
+    jvm = spark.sparkContext._gateway.jvm
+    jvm.java.lang.Class.forName(MYSQL_DRIVER)
+
+    connection = None
+    statement = None
+
+    try:
+        connection = jvm.java.sql.DriverManager.getConnection(
+            JDBC_URL,
+            MYSQL_USER,
+            MYSQL_PASSWORD
+        )
+        connection.setAutoCommit(False)
+        statement = connection.createStatement()
+
+        for sql_statement in sql_statements:
+            statement.executeUpdate(sql_statement)
+
+        connection.commit()
+    except Exception:
+        if connection is not None:
+            connection.rollback()
+        raise
+    finally:
+        if statement is not None:
+            statement.close()
+        if connection is not None:
+            connection.close()
+
+def different_value(left_alias, right_alias, columns):
+    expression = F.lit(False)
+
+    for column_name in columns:
+        expression = expression | (
+            ~F.col(f"{left_alias}.{column_name}").eqNullSafe(
+                F.col(f"{right_alias}.{column_name}")
+            )
+        )
+
+    return expression
+
+print("Spark version:", spark.version)
+print("MySQL database:", MYSQL_DATABASE)</code></pre>
+        </div>
+      </details>
+
+      <div class="note"><strong>Why a staging table is used:</strong> PySpark detects the required action and writes only those rows to staging. MySQL then applies the updates and inserts inside a transaction.</div>
+    </section>
+
+    <section id="data">
+      <h2>5. Create one snapshot and two incremental batches</h2>
+      <p>The same two batches will be applied independently to Type 1, Type 2 and Type 3. This makes the final comparison fair.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Rows</th><th>New</th><th>Changed</th><th>Unchanged</th></tr></thead>
+          <tbody>
+            <tr><td>Initial snapshot</td><td>10</td><td>10 initial rows</td><td>Not applicable</td><td>Not applicable</td></tr>
+            <tr><td>Incremental Batch 1</td><td>8</td><td>C011, C012</td><td>C001, C002, C003, C006</td><td>C004, C005</td></tr>
+            <tr><td>Incremental Batch 2</td><td>8</td><td>C013, C014</td><td>C001, C002, C003, C006, C012</td><td>C011</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details class="code-panel">
+        <summary>Run 3A in the PySpark shell - create the initial customer snapshot</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>customer_schema = StructType([
+    StructField("customer_id", StringType(), False),
+    StructField("customer_name", StringType(), False),
+    StructField("city", StringType(), False),
+    StructField("email", StringType(), False),
+    StructField("membership_tier", StringType(), False),
+    StructField("updated_at", DateType(), False)
+])
+
+initial_rows = [
+    ("C001", "Aarav Sharma", "Pune", "aarav.sharma@example.com", "SILVER", date(2026, 1, 1)),
+    ("C002", "Diya Patel", "Ahmedabad", "diya.patel@example.com", "BRONZE", date(2026, 1, 1)),
+    ("C003", "Rohan Mehta", "Mumbai", "rohan.mehta@example.com", "GOLD", date(2026, 1, 1)),
+    ("C004", "Ananya Rao", "Hyderabad", "ananya.rao@example.com", "SILVER", date(2026, 1, 1)),
+    ("C005", "Kabir Singh", "Jaipur", "kabir.singh@example.com", "BRONZE", date(2026, 1, 1)),
+    ("C006", "Meera Nair", "Kochi", "meera.nair@example.com", "GOLD", date(2026, 1, 1)),
+    ("C007", "Vivaan Gupta", "Delhi", "vivaan.gupta@example.com", "SILVER", date(2026, 1, 1)),
+    ("C008", "Isha Verma", "Lucknow", "isha.verma@example.com", "GOLD", date(2026, 1, 1)),
+    ("C009", "Aditya Joshi", "Nagpur", "aditya.joshi@example.com", "BRONZE", date(2026, 1, 1)),
+    ("C010", "Sara Khan", "Bhopal", "sara.khan@example.com", "SILVER", date(2026, 1, 1))
+]
+
+initial_df = spark.createDataFrame(initial_rows, customer_schema)
+
+initial_df.orderBy("customer_id").show(20, truncate=False)
+print("Initial rows:", initial_df.count())</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Run 3B in the PySpark shell - create Incremental Batch 1</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>batch_1_rows = [
+    # Changed email
+    ("C001", "Aarav Sharma", "Pune", "aarav.s@example.com", "SILVER", date(2026, 2, 1)),
+
+    # Changed membership tier
+    ("C002", "Diya Patel", "Ahmedabad", "diya.patel@example.com", "SILVER", date(2026, 2, 1)),
+
+    # Changed city
+    ("C003", "Rohan Mehta", "Bengaluru", "rohan.mehta@example.com", "GOLD", date(2026, 2, 1)),
+
+    # Unchanged customers
+    ("C004", "Ananya Rao", "Hyderabad", "ananya.rao@example.com", "SILVER", date(2026, 2, 1)),
+    ("C005", "Kabir Singh", "Jaipur", "kabir.singh@example.com", "BRONZE", date(2026, 2, 1)),
+
+    # Changed city, email and membership tier
+    ("C006", "Meera Nair", "Chennai", "meera.n@example.com", "PLATINUM", date(2026, 2, 1)),
+
+    # New customers
+    ("C011", "Neha Kulkarni", "Nashik", "neha.kulkarni@example.com", "BRONZE", date(2026, 2, 1)),
+    ("C012", "Arjun Desai", "Surat", "arjun.desai@example.com", "SILVER", date(2026, 2, 1))
+]
+
+batch_1_df = spark.createDataFrame(batch_1_rows, customer_schema)
+
+batch_1_df.orderBy("customer_id").show(20, truncate=False)
+print("Batch 1 rows:", batch_1_df.count())</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Run 3C in the PySpark shell - create Incremental Batch 2</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>batch_2_rows = [
+    # Email changes for a second time
+    ("C001", "Aarav Sharma", "Pune", "aarav.latest@example.com", "SILVER", date(2026, 3, 1)),
+
+    # Membership changes for a second time
+    ("C002", "Diya Patel", "Ahmedabad", "diya.patel@example.com", "GOLD", date(2026, 3, 1)),
+
+    # City changes for a second time
+    ("C003", "Rohan Mehta", "Hyderabad", "rohan.mehta@example.com", "GOLD", date(2026, 3, 1)),
+
+    # Another city change
+    ("C006", "Meera Nair", "Mumbai", "meera.n@example.com", "PLATINUM", date(2026, 3, 1)),
+
+    # Unchanged customer
+    ("C011", "Neha Kulkarni", "Nashik", "neha.kulkarni@example.com", "BRONZE", date(2026, 3, 1)),
+
+    # Changed email
+    ("C012", "Arjun Desai", "Surat", "arjun.d@example.com", "SILVER", date(2026, 3, 1)),
+
+    # New customers
+    ("C013", "Priya Iyer", "Coimbatore", "priya.iyer@example.com", "GOLD", date(2026, 3, 1)),
+    ("C014", "Rahul Bose", "Kolkata", "rahul.bose@example.com", "BRONZE", date(2026, 3, 1))
+]
+
+batch_2_df = spark.createDataFrame(batch_2_rows, customer_schema)
+
+batch_2_df.orderBy("customer_id").show(20, truncate=False)
+print("Batch 2 rows:", batch_2_df.count())</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Run 3D in the PySpark shell - validate every incoming batch</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>def validate_incoming_batch(dataframe, batch_name, expected_rows):
+    duplicate_keys = (
+        dataframe
+        .groupBy("customer_id")
+        .count()
+        .filter(F.col("count") &gt; 1)
+        .count()
+    )
+
+    null_required_values = (
+        dataframe
+        .filter(
+            F.col("customer_id").isNull()
+            | F.col("customer_name").isNull()
+            | F.col("city").isNull()
+            | F.col("email").isNull()
+            | F.col("membership_tier").isNull()
+            | F.col("updated_at").isNull()
+        )
+        .count()
+    )
+
+    actual_rows = dataframe.count()
+
+    assert actual_rows == expected_rows, (
+        f"{batch_name}: expected {expected_rows} rows, "
+        f"but found {actual_rows}"
+    )
+    assert duplicate_keys == 0, f"{batch_name}: duplicate customer_id found"
+    assert null_required_values == 0, f"{batch_name}: required value is missing"
+
+    print(batch_name, "PASS")
+
+validate_incoming_batch(initial_df, "Initial snapshot", 10)
+validate_incoming_batch(batch_1_df, "Incremental Batch 1", 8)
+validate_incoming_batch(batch_2_df, "Incremental Batch 2", 8)</code></pre>
+        </div>
+      </details>
+    </section>
+
+    <section id="initial-load">
+      <h2>6. Load the same initial snapshot into all three dimensions</h2>
+      <p>The initial rows are shaped differently because each dimension stores history differently.</p>
+
+      <details class="code-panel">
+        <summary>Run 4A in the PySpark shell - prepare and load the three initial tables</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>initial_type1_df = initial_df.select(
+    "customer_id",
+    "customer_name",
+    "city",
+    "email",
+    "membership_tier",
+    "updated_at"
+)
+
+initial_type2_df = initial_df.select(
+    "customer_id",
+    "customer_name",
+    "city",
+    "email",
+    "membership_tier",
+    F.col("updated_at").alias("effective_from"),
+    F.lit(None).cast("date").alias("effective_to"),
+    F.lit(1).cast("int").alias("is_current"),
+    F.lit(1).cast("int").alias("version_number")
+)
+
+initial_type3_df = initial_df.select(
+    "customer_id",
+    "customer_name",
+    F.col("city").alias("current_city"),
+    F.lit(None).cast("string").alias("previous_city"),
+    "email",
+    "membership_tier",
+    "updated_at"
+)
+
+write_mysql_append(initial_type1_df, "dim_customer_type1")
+write_mysql_append(initial_type2_df, "dim_customer_type2")
+write_mysql_append(initial_type3_df, "dim_customer_type3")
+
+print("Type 1 initial rows:", read_mysql("dim_customer_type1").count())
+print("Type 2 initial rows:", read_mysql("dim_customer_type2").count())
+print("Type 3 initial rows:", read_mysql("dim_customer_type3").count())</code></pre>
+        </div>
+      </details>
+
+      <div class="result"><strong>Expected result:</strong> each dimension contains <code>10</code> rows.</div>
+    </section>
+
+    <section id="type1">
+      <h2>7. SCD Type 1: apply two ingestion batches</h2>
+      <p>Type 1 keeps only the latest values. A changed customer is updated in place, so the existing surrogate key remains the same and the old attribute values are lost.</p>
+
+      <h3>How the code works</h3>
+      <ol>
+        <li>Read the current Type 1 dimension.</li>
+        <li>Classify each incoming row as <span class="pill new">NEW</span>, <span class="pill changed">CHANGED</span> or <span class="pill unchanged">UNCHANGED</span>.</li>
+        <li>Write only new and changed rows to staging.</li>
+        <li>Insert new customers and update existing customers using the business key.</li>
+      </ol>
+
+      <details class="code-panel">
+        <summary>Run 5A in the PySpark shell - define the SCD Type 1 function</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>TYPE1_TRACKED_COLUMNS = [
+    "customer_name",
+    "city",
+    "email",
+    "membership_tier"
+]
+
+def apply_scd_type1(incoming_df, batch_name):
+    current_df = read_mysql("dim_customer_type1")
+
+    classified_df = (
+        incoming_df.alias("i")
+        .join(
+            current_df.alias("d"),
+            F.col("i.customer_id") == F.col("d.customer_id"),
+            "left"
+        )
+        .select(
+            F.col("i.customer_id"),
+            F.col("i.customer_name"),
+            F.col("i.city"),
+            F.col("i.email"),
+            F.col("i.membership_tier"),
+            F.col("i.updated_at"),
+            F.when(
+                F.col("d.customer_id").isNull(),
+                F.lit("NEW")
+            ).when(
+                different_value("i", "d", TYPE1_TRACKED_COLUMNS),
+                F.lit("CHANGED")
+            ).otherwise(F.lit("UNCHANGED")).alias("action")
+        )
+    )
+
+    print(f"Type 1 - {batch_name}")
+    classified_df.groupBy("action").count().orderBy("action").show()
+
+    rows_to_apply_df = (
+        classified_df
+        .filter(F.col("action").isin("NEW", "CHANGED"))
+        .drop("action")
+    )
+
+    rows_to_apply = rows_to_apply_df.count()
+
+    if rows_to_apply == 0:
+        print("No Type 1 rows need to be applied.")
+        return classified_df
+
+    write_mysql_stage(rows_to_apply_df, "stg_customer_type1")
+
+    execute_mysql_transaction([
+        """
+        UPDATE dim_customer_type1 AS destination
+        INNER JOIN stg_customer_type1 AS incoming
+            ON destination.customer_id = incoming.customer_id
+        SET
+            destination.customer_name = incoming.customer_name,
+            destination.city = incoming.city,
+            destination.email = incoming.email,
+            destination.membership_tier = incoming.membership_tier,
+            destination.updated_at = incoming.updated_at
+        """,
+        """
+        INSERT INTO dim_customer_type1
+        (
+            customer_id,
+            customer_name,
+            city,
+            email,
+            membership_tier,
+            updated_at
+        )
+        SELECT
+            incoming.customer_id,
+            incoming.customer_name,
+            incoming.city,
+            incoming.email,
+            incoming.membership_tier,
+            incoming.updated_at
+        FROM stg_customer_type1 AS incoming
+        LEFT JOIN dim_customer_type1 AS destination
+            ON incoming.customer_id = destination.customer_id
+        WHERE destination.customer_id IS NULL
+        """
+    ])
+
+    print("Rows applied:", rows_to_apply)
+    return classified_df</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Run 5B in the PySpark shell - apply Type 1 Incremental Batch 1</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type1_batch1_result = apply_scd_type1(
+    batch_1_df,
+    "Incremental Batch 1"
+)
+
+type1_after_batch1 = read_mysql("dim_customer_type1")
+
+assert type1_after_batch1.count() == 12
+
+type1_after_batch1.filter(
+    F.col("customer_id").isin("C001", "C002", "C003", "C006", "C011", "C012")
+).orderBy("customer_id").show(truncate=False)</code></pre>
+        </div>
+      </details>
+
+      <div class="result"><strong>Batch 1 result:</strong> 4 changed rows are overwritten, 2 new rows are inserted and 2 unchanged rows are ignored. The table contains <code>12</code> rows.</div>
+
+      <details class="code-panel">
+        <summary>Run 5C in the PySpark shell - apply Type 1 Incremental Batch 2</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type1_batch2_result = apply_scd_type1(
+    batch_2_df,
+    "Incremental Batch 2"
+)
+
+type1_final = read_mysql("dim_customer_type1")
+
+assert type1_final.count() == 14
+
+type1_final.filter(
+    F.col("customer_id").isin("C001", "C002", "C003", "C006", "C012", "C013", "C014")
+).orderBy("customer_id").show(truncate=False)</code></pre>
+        </div>
+      </details>
+
+      <div class="result"><strong>Batch 2 result:</strong> 5 changed rows are overwritten, 2 new rows are inserted and 1 unchanged row is ignored. The final table contains <code>14</code> rows.</div>
+
+      <details class="code-panel">
+        <summary>Run 5D in the PySpark shell - rerun Batch 2 and prove idempotency</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type1_rerun_result = apply_scd_type1(
+    batch_2_df,
+    "Incremental Batch 2 rerun"
+)
+
+assert type1_rerun_result.filter(
+    F.col("action") != "UNCHANGED"
+).count() == 0
+
+assert read_mysql("dim_customer_type1").count() == 14
+
+print("Type 1 idempotency check: PASS")</code></pre>
+        </div>
+      </details>
+    </section>
+
+    <section id="type2">
+      <h2>8. SCD Type 2: apply two ingestion batches</h2>
+      <p>Type 2 keeps complete history. When a tracked attribute changes, the current row is expired and a new current version is inserted with a new surrogate key.</p>
+
+      <div class="card-grid">
+        <div class="card"><strong><code>effective_from</code></strong><span>The first date on which this version is valid.</span></div>
+        <div class="card"><strong><code>effective_to</code></strong><span>The last date on which an expired version was valid. Current rows use <code>NULL</code>.</span></div>
+        <div class="card"><strong><code>is_current</code></strong><span><code>1</code> identifies the current version and <code>0</code> identifies an old version.</span></div>
+        <div class="card"><strong><code>version_number</code></strong><span>Starts at 1 and increases for every new version of the same customer.</span></div>
+      </div>
+
+      <details class="code-panel">
+        <summary>Run 6A in the PySpark shell - define the SCD Type 2 function</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>TYPE2_TRACKED_COLUMNS = [
+    "customer_name",
+    "city",
+    "email",
+    "membership_tier"
+]
+
+def apply_scd_type2(incoming_df, batch_name):
+    current_df = (
+        read_mysql("dim_customer_type2")
+        .filter(F.col("is_current") == 1)
+    )
+
+    classified_df = (
+        incoming_df.alias("i")
+        .join(
+            current_df.alias("d"),
+            F.col("i.customer_id") == F.col("d.customer_id"),
+            "left"
+        )
+        .select(
+            F.col("i.customer_id"),
+            F.col("i.customer_name"),
+            F.col("i.city"),
+            F.col("i.email"),
+            F.col("i.membership_tier"),
+            F.col("i.updated_at").alias("effective_from"),
+            F.lit(None).cast("date").alias("effective_to"),
+            F.lit(1).cast("int").alias("is_current"),
+            F.when(
+                F.col("d.customer_id").isNull(),
+                F.lit(1)
+            ).otherwise(
+                F.col("d.version_number") + F.lit(1)
+            ).cast("int").alias("version_number"),
+            F.when(
+                F.col("d.customer_id").isNull(),
+                F.lit("NEW")
+            ).when(
+                different_value("i", "d", TYPE2_TRACKED_COLUMNS),
+                F.lit("CHANGED")
+            ).otherwise(F.lit("UNCHANGED")).alias("action")
+        )
+    )
+
+    print(f"Type 2 - {batch_name}")
+    classified_df.groupBy("action").count().orderBy("action").show()
+
+    rows_to_apply_df = classified_df.filter(
+        F.col("action").isin("NEW", "CHANGED")
+    )
+
+    rows_to_apply = rows_to_apply_df.count()
+
+    if rows_to_apply == 0:
+        print("No Type 2 rows need to be applied.")
+        return classified_df
+
+    write_mysql_stage(rows_to_apply_df, "stg_customer_type2")
+
+    execute_mysql_transaction([
+        """
+        UPDATE dim_customer_type2 AS destination
+        INNER JOIN stg_customer_type2 AS incoming
+            ON destination.customer_id = incoming.customer_id
+        SET
+            destination.effective_to = DATE_SUB(
+                incoming.effective_from,
+                INTERVAL 1 DAY
+            ),
+            destination.is_current = 0
+        WHERE destination.is_current = 1
+          AND incoming.action = 'CHANGED'
+        """,
+        """
+        INSERT INTO dim_customer_type2
+        (
+            customer_id,
+            customer_name,
+            city,
+            email,
+            membership_tier,
+            effective_from,
+            effective_to,
+            is_current,
+            version_number
+        )
+        SELECT
+            customer_id,
+            customer_name,
+            city,
+            email,
+            membership_tier,
+            effective_from,
+            effective_to,
+            is_current,
+            version_number
+        FROM stg_customer_type2
+        WHERE action IN ('NEW', 'CHANGED')
+        """
+    ])
+
+    print("New Type 2 versions inserted:", rows_to_apply)
+    return classified_df</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Run 6B in the PySpark shell - apply Type 2 Incremental Batch 1</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type2_batch1_result = apply_scd_type2(
+    batch_1_df,
+    "Incremental Batch 1"
+)
+
+type2_after_batch1 = read_mysql("dim_customer_type2")
+
+assert type2_after_batch1.count() == 16
+assert type2_after_batch1.filter(F.col("is_current") == 1).count() == 12
+
+type2_after_batch1.filter(
+    F.col("customer_id").isin("C002", "C003", "C006")
+).orderBy("customer_id", "version_number").show(truncate=False)</code></pre>
+        </div>
+      </details>
+
+      <div class="result"><strong>Batch 1 result:</strong> 4 existing rows are expired, 4 replacement versions are inserted and 2 new customers are inserted. The table contains <code>16</code> physical rows and <code>12</code> current customers.</div>
+
+      <details class="code-panel">
+        <summary>Run 6C in the PySpark shell - apply Type 2 Incremental Batch 2</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type2_batch2_result = apply_scd_type2(
+    batch_2_df,
+    "Incremental Batch 2"
+)
+
+type2_final = read_mysql("dim_customer_type2")
+
+assert type2_final.count() == 23
+assert type2_final.filter(F.col("is_current") == 1).count() == 14
+
+type2_final.filter(
+    F.col("customer_id").isin("C001", "C002", "C003", "C006", "C012")
+).orderBy("customer_id", "version_number").show(30, truncate=False)</code></pre>
+        </div>
+      </details>
+
+      <div class="result"><strong>Batch 2 result:</strong> 5 current rows are expired, 5 replacement versions are inserted and 2 new customers are inserted. The final table contains <code>23</code> physical rows and <code>14</code> current customers.</div>
+
+      <details class="code-panel">
+        <summary>Run 6D in the PySpark shell - validate Type 2 history and rerun safety</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type2_final = read_mysql("dim_customer_type2")
+
+customers_with_wrong_current_count = (
+    type2_final
+    .groupBy("customer_id")
+    .agg(
+        F.sum(
+            F.when(F.col("is_current") == 1, 1).otherwise(0)
+        ).alias("current_rows")
+    )
+    .filter(F.col("current_rows") != 1)
+    .count()
+)
+
+invalid_current_end_dates = (
+    type2_final
+    .filter(
+        (F.col("is_current") == 1)
+        &amp; F.col("effective_to").isNotNull()
+    )
+    .count()
+)
+
+invalid_old_end_dates = (
+    type2_final
+    .filter(
+        (F.col("is_current") == 0)
+        &amp; F.col("effective_to").isNull()
+    )
+    .count()
+)
+
+assert customers_with_wrong_current_count == 0
+assert invalid_current_end_dates == 0
+assert invalid_old_end_dates == 0
+
+type2_rerun_result = apply_scd_type2(
+    batch_2_df,
+    "Incremental Batch 2 rerun"
+)
+
+assert type2_rerun_result.filter(
+    F.col("action") != "UNCHANGED"
+).count() == 0
+
+assert read_mysql("dim_customer_type2").count() == 23
+
+print("Type 2 history checks: PASS")
+print("Type 2 idempotency check: PASS")</code></pre>
+        </div>
+      </details>
+
+      <div class="note"><strong>Important:</strong> Type 2 creates a new surrogate key for every new version. A fact table should look up the version that was valid on the date of the business event. This practice processes daily batches in date order; late-arriving changes need an additional rule for adjusting existing date ranges.</div>
+    </section>
+
+    <section id="type3">
+      <h2>9. SCD Type 3: apply two ingestion batches</h2>
+      <p>Type 3 keeps the current city and one previous city in the same row. Other attributes in this example keep only their latest values.</p>
+
+      <h3>City rule</h3>
+      <ul>
+        <li>If the city changes, copy <code>current_city</code> to <code>previous_city</code>.</li>
+        <li>Store the incoming city as the new <code>current_city</code>.</li>
+        <li>If only email or membership changes, keep both city columns unchanged.</li>
+      </ul>
+
+      <details class="code-panel">
+        <summary>Run 7A in the PySpark shell - define the SCD Type 3 function</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>def apply_scd_type3(incoming_df, batch_name):
+    current_df = read_mysql("dim_customer_type3")
+
+    city_changed = ~F.col("i.city").eqNullSafe(
+        F.col("d.current_city")
+    )
+
+    any_value_changed = (
+        ~F.col("i.customer_name").eqNullSafe(F.col("d.customer_name"))
+        | city_changed
+        | ~F.col("i.email").eqNullSafe(F.col("d.email"))
+        | ~F.col("i.membership_tier").eqNullSafe(
+            F.col("d.membership_tier")
+        )
+    )
+
+    classified_df = (
+        incoming_df.alias("i")
+        .join(
+            current_df.alias("d"),
+            F.col("i.customer_id") == F.col("d.customer_id"),
+            "left"
+        )
+        .select(
+            F.col("i.customer_id"),
+            F.col("i.customer_name"),
+            F.col("i.city").alias("current_city"),
+            F.when(
+                F.col("d.customer_id").isNull(),
+                F.lit(None).cast("string")
+            ).when(
+                city_changed,
+                F.col("d.current_city")
+            ).otherwise(
+                F.col("d.previous_city")
+            ).alias("previous_city"),
+            F.col("i.email"),
+            F.col("i.membership_tier"),
+            F.col("i.updated_at"),
+            F.when(
+                F.col("d.customer_id").isNull(),
+                F.lit("NEW")
+            ).when(
+                any_value_changed,
+                F.lit("CHANGED")
+            ).otherwise(F.lit("UNCHANGED")).alias("action")
+        )
+    )
+
+    print(f"Type 3 - {batch_name}")
+    classified_df.groupBy("action").count().orderBy("action").show()
+
+    rows_to_apply_df = (
+        classified_df
+        .filter(F.col("action").isin("NEW", "CHANGED"))
+        .drop("action")
+    )
+
+    rows_to_apply = rows_to_apply_df.count()
+
+    if rows_to_apply == 0:
+        print("No Type 3 rows need to be applied.")
+        return classified_df
+
+    write_mysql_stage(rows_to_apply_df, "stg_customer_type3")
+
+    execute_mysql_transaction([
+        """
+        UPDATE dim_customer_type3 AS destination
+        INNER JOIN stg_customer_type3 AS incoming
+            ON destination.customer_id = incoming.customer_id
+        SET
+            destination.customer_name = incoming.customer_name,
+            destination.current_city = incoming.current_city,
+            destination.previous_city = incoming.previous_city,
+            destination.email = incoming.email,
+            destination.membership_tier = incoming.membership_tier,
+            destination.updated_at = incoming.updated_at
+        """,
+        """
+        INSERT INTO dim_customer_type3
+        (
+            customer_id,
+            customer_name,
+            current_city,
+            previous_city,
+            email,
+            membership_tier,
+            updated_at
+        )
+        SELECT
+            incoming.customer_id,
+            incoming.customer_name,
+            incoming.current_city,
+            incoming.previous_city,
+            incoming.email,
+            incoming.membership_tier,
+            incoming.updated_at
+        FROM stg_customer_type3 AS incoming
+        LEFT JOIN dim_customer_type3 AS destination
+            ON incoming.customer_id = destination.customer_id
+        WHERE destination.customer_id IS NULL
+        """
+    ])
+
+    print("Rows applied:", rows_to_apply)
+    return classified_df</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Run 7B in the PySpark shell - apply Type 3 Incremental Batch 1</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type3_batch1_result = apply_scd_type3(
+    batch_1_df,
+    "Incremental Batch 1"
+)
+
+type3_after_batch1 = read_mysql("dim_customer_type3")
+
+assert type3_after_batch1.count() == 12
+
+type3_after_batch1.filter(
+    F.col("customer_id").isin("C003", "C006")
+).select(
+    "customer_id",
+    "previous_city",
+    "current_city"
+).orderBy("customer_id").show(truncate=False)</code></pre>
+        </div>
+      </details>
+
+      <div class="result"><strong>Batch 1 city result:</strong> C003 stores <code>Mumbai → Bengaluru</code>, and C006 stores <code>Kochi → Chennai</code>.</div>
+
+      <details class="code-panel">
+        <summary>Run 7C in the PySpark shell - apply Type 3 Incremental Batch 2</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type3_batch2_result = apply_scd_type3(
+    batch_2_df,
+    "Incremental Batch 2"
+)
+
+type3_final = read_mysql("dim_customer_type3")
+
+assert type3_final.count() == 14
+
+type3_final.filter(
+    F.col("customer_id").isin("C003", "C006")
+).select(
+    "customer_id",
+    "previous_city",
+    "current_city"
+).orderBy("customer_id").show(truncate=False)</code></pre>
+        </div>
+      </details>
+
+      <div class="result"><strong>Batch 2 city result:</strong> C003 now stores <code>Bengaluru → Hyderabad</code>, and C006 stores <code>Chennai → Mumbai</code>. Their original cities are no longer available in Type 3.</div>
+
+      <details class="code-panel">
+        <summary>Run 7D in the PySpark shell - rerun Batch 2 and prove idempotency</summary>
+        <div class="code-wrap">
+          <div class="code-label">PySpark</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>type3_rerun_result = apply_scd_type3(
+    batch_2_df,
+    "Incremental Batch 2 rerun"
+)
+
+assert type3_rerun_result.filter(
+    F.col("action") != "UNCHANGED"
+).count() == 0
+
+assert read_mysql("dim_customer_type3").count() == 14
+
+print("Type 3 idempotency check: PASS")</code></pre>
+        </div>
+      </details>
+    </section>
+
+    <section id="final-checks">
+      <h2>10. Final MySQL reconciliation</h2>
+      <p>Run these checks after all six batch operations: two for Type 1, two for Type 2 and two for Type 3.</p>
+
+      <details class="code-panel">
+        <summary>Run 8A in MySQL Workbench - reconcile row counts</summary>
+        <div class="code-wrap">
+          <div class="code-label">MySQL</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>USE scd_customer_demo;
+
+SELECT 'Type 1 physical rows' AS check_name, COUNT(*) AS result
+FROM dim_customer_type1
+
+UNION ALL
+
+SELECT 'Type 2 physical rows', COUNT(*)
+FROM dim_customer_type2
+
+UNION ALL
+
+SELECT 'Type 2 current rows', COUNT(*)
+FROM dim_customer_type2
+WHERE is_current = 1
+
+UNION ALL
+
+SELECT 'Type 2 historical rows', COUNT(*)
+FROM dim_customer_type2
+WHERE is_current = 0
+
+UNION ALL
+
+SELECT 'Type 3 physical rows', COUNT(*)
+FROM dim_customer_type3;</code></pre>
+        </div>
+      </details>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Check</th><th>Expected result</th><th>Reason</th></tr></thead>
+          <tbody>
+            <tr><td>Type 1 physical rows</td><td>14</td><td>One row per customer</td></tr>
+            <tr><td>Type 2 physical rows</td><td>23</td><td>Current and historical versions</td></tr>
+            <tr><td>Type 2 current rows</td><td>14</td><td>One current row per customer</td></tr>
+            <tr><td>Type 2 historical rows</td><td>9</td><td>Nine old versions created by the two batches</td></tr>
+            <tr><td>Type 3 physical rows</td><td>14</td><td>One row per customer</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details class="code-panel">
+        <summary>Run 8B in MySQL Workbench - inspect one customer across all SCD types</summary>
+        <div class="code-wrap">
+          <div class="code-label">MySQL</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>USE scd_customer_demo;
+
+SELECT
+    customer_key,
+    customer_id,
+    city,
+    email,
+    membership_tier,
+    updated_at
+FROM dim_customer_type1
+WHERE customer_id = 'C003';
+
+SELECT
+    customer_key,
+    customer_id,
+    city,
+    effective_from,
+    effective_to,
+    is_current,
+    version_number
+FROM dim_customer_type2
+WHERE customer_id = 'C003'
+ORDER BY version_number;
+
+SELECT
+    customer_key,
+    customer_id,
+    previous_city,
+    current_city,
+    updated_at
+FROM dim_customer_type3
+WHERE customer_id = 'C003';</code></pre>
+        </div>
+      </details>
+
+      <details class="code-panel">
+        <summary>Run 8C in MySQL Workbench - validate the Type 2 rules</summary>
+        <div class="code-wrap">
+          <div class="code-label">MySQL</div>
+          <button class="copy-code" type="button">Copy</button>
+          <pre><code>USE scd_customer_demo;
+
+-- This query must return no rows.
+SELECT
+    customer_id,
+    SUM(CASE WHEN is_current = 1 THEN 1 ELSE 0 END) AS current_rows
+FROM dim_customer_type2
+GROUP BY customer_id
+HAVING current_rows != 1;
+
+-- This query must return 0.
+SELECT COUNT(*) AS invalid_current_rows
+FROM dim_customer_type2
+WHERE is_current = 1
+  AND effective_to IS NOT NULL;
+
+-- This query must return 0.
+SELECT COUNT(*) AS invalid_historical_rows
+FROM dim_customer_type2
+WHERE is_current = 0
+  AND effective_to IS NULL;
+
+-- This query must return 0.
+SELECT COUNT(*) AS duplicate_versions
+FROM
+(
+    SELECT customer_id, version_number
+    FROM dim_customer_type2
+    GROUP BY customer_id, version_number
+    HAVING COUNT(*) &gt; 1
+) AS duplicates_found;</code></pre>
+        </div>
+      </details>
+
+      <h3>Choose the type from the business requirement</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Question</th><th>Type 1</th><th>Type 2</th><th>Type 3</th></tr></thead>
+          <tbody>
+            <tr><td>Do we need only the latest value?</td><td>Best fit</td><td>Possible, but stores more data</td><td>Possible, but adds a previous column</td></tr>
+            <tr><td>Do we need complete history?</td><td>No</td><td>Best fit</td><td>No</td></tr>
+            <tr><td>Do we need only current and previous values?</td><td>No</td><td>Possible, but more than required</td><td>Best fit</td></tr>
+            <tr><td>Does a change create a new row?</td><td>No</td><td>Yes</td><td>No</td></tr>
+            <tr><td>Does a change create a new surrogate key?</td><td>No</td><td>Yes</td><td>No</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="warning"><strong>Production awareness:</strong> one dimension can use different rules for different attributes. For example, email correction may use Type 1 while membership tier uses Type 2. The rule must come from the reporting requirement.</div>
+      <div class="result"><strong>Session checkpoint:</strong> you processed six independent SCD operations, kept the expected history, avoided duplicate results on rerun and validated the final MySQL tables.</div>
+    </section>
+  </main>
+
+  <footer>Slowly Changing Dimensions • PySpark shell and MySQL</footer>
+
+  <script>
+    const root = document.documentElement;
+    const themeButton = document.getElementById("themeToggle");
+
+    themeButton.addEventListener("click", () => {
+      const dark = root.getAttribute("data-theme") === "dark";
+      root.setAttribute("data-theme", dark ? "light" : "dark");
+      themeButton.textContent = dark ? "Dark theme" : "Light theme";
+      themeButton.setAttribute("aria-pressed", String(!dark));
+    });
+
+    document.getElementById("expandAll").addEventListener("click", () => {
+      document.querySelectorAll("details.code-panel").forEach(panel => {
+        panel.open = true;
+      });
+    });
+
+    document.getElementById("collapseAll").addEventListener("click", () => {
+      document.querySelectorAll("details.code-panel").forEach(panel => {
+        panel.open = false;
+      });
+    });
+
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.closest(".code-wrap").querySelector("code").innerText;
+        const oldText = button.textContent;
+
+        try {
+          await navigator.clipboard.writeText(code);
+          button.textContent = "Copied";
+        } catch (error) {
+          button.textContent = "Copy failed";
+        }
+
+        setTimeout(() => {
+          button.textContent = oldText;
+        }, 1400);
+      });
+    });
+  </script>
+</body>
+</html>
